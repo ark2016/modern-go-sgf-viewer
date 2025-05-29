@@ -1,0 +1,6 @@
+{
+  "name": "Go Board SGF Viewer",
+  "description": "A web application to display Go (Baduk/Weiqi) games from SGF files. It features an adaptive board, move navigation, game information display, and detailed Go rules.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
