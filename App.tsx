@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import GoBoard from './components/GoBoard';
 import Controls from './components/Controls';
@@ -455,6 +454,255 @@ const App: React.FC = () => {
     };
   }, [gameData, currentNodeId, handleNavigation, handleToggleEditMode, isEditMode, activeEditTool]);
 
+  // Добавляем новую функцию для режима коррекции
+  const handleCorrectionMode = (point: Point) => {
+    if (!gameData || !currentNodeId) return;
+    
+    const currentSgfNode = gameData.nodes[currentNodeId];
+    if (!currentSgfNode) return;
+    
+    const sgfCoord = utilPointToSgfCoord(point);
+    const newSgfProps = { ...(currentSgfNode.sgfProps || {}) };
+    let newBoardForEdit = cloneBoard(currentSgfNode.boardState);
+    
+    // Определяем текущий цвет камня в этой точке
+    const currentStoneColor = newBoardForEdit[point.r][point.c];
+    let newColorForPoint: StoneColor;
+    
+    // Если точка пуста, размещаем камень текущего игрока
+    if (currentStoneColor === StoneColor.Empty) {
+        newColorForPoint = editModePlayer;
+    } 
+    // Если камень того же цвета, что и текущий игрок - удаляем его
+    else if (currentStoneColor === editModePlayer) {
+        newColorForPoint = StoneColor.Empty;
+    }
+    // Если камень противоположного цвета - заменяем его на камень текущего игрока
+    else {
+        newColorForPoint = editModePlayer;
+    }
+    
+    // Обновляем доску
+    newBoardForEdit[point.r][point.c] = newColorForPoint;
+    
+    // Обновляем SGF свойства
+    ['AB', 'AW', 'AE'].forEach(key => {
+        if (newSgfProps[key]) newSgfProps[key] = newSgfProps[key]!.filter(c => c !== sgfCoord);
+        if (newSgfProps[key]?.length === 0) delete newSgfProps[key];
+    });
+    
+    if (newColorForPoint !== StoneColor.Empty) {
+        const propKey = newColorForPoint === StoneColor.Black ? 'AB' : 'AW';
+        if (!newSgfProps[propKey]) newSgfProps[propKey] = [];
+        if (!newSgfProps[propKey]!.includes(sgfCoord)) newSgfProps[propKey]!.push(sgfCoord);
+    } else {
+        if (!newSgfProps['AE']) newSgfProps['AE'] = [];
+        if (!newSgfProps['AE']!.includes(sgfCoord)) newSgfProps['AE']!.push(sgfCoord);
+    }
+    
+    delete newSgfProps['B']; delete newSgfProps['W']; // Становится узлом настройки
+    
+    // Проверяем захват камней, если был поставлен новый камень
+    let sessionCapturesDelta = { black: 0, white: 0 };
+    if (newColorForPoint !== StoneColor.Empty) {
+        const opponentOfPlacedStone = newColorForPoint === StoneColor.Black ? StoneColor.White : StoneColor.Black;
+        
+        // Проверяем соседние группы камней противника
+        const neighbors = [{r:point.r-1,c:point.c},{r:point.r+1,c:point.c},{r:point.r,c:point.c-1},{r:point.r,c:point.c+1}];
+        for (const n of neighbors) {
+            if (n.r >= 0 && n.r < boardSize && n.c >= 0 && n.c < boardSize && newBoardForEdit[n.r][n.c] === opponentOfPlacedStone) {
+                const { group, liberties } = getGroupAndLiberties(newBoardForEdit, n.r, n.c);
+                if (liberties.length === 0) {
+                    group.forEach(s => {
+                        newBoardForEdit[s.r][s.c] = StoneColor.Empty;
+                        const capturedSgfCoord = utilPointToSgfCoord(s);
+                        if (newSgfProps['AB']) newSgfProps['AB'] = newSgfProps['AB']!.filter(c => c !== capturedSgfCoord);
+                        if (newSgfProps['AW']) newSgfProps['AW'] = newSgfProps['AW']!.filter(c => c !== capturedSgfCoord);
+                        if (!newSgfProps['AE']) newSgfProps['AE'] = [];
+                        if (!newSgfProps['AE']!.includes(capturedSgfCoord)) newSgfProps['AE']!.push(capturedSgfCoord);
+                    });
+                    if (opponentOfPlacedStone === StoneColor.Black) {
+                        sessionCapturesDelta.black += group.length;
+                    } else {
+                        sessionCapturesDelta.white += group.length;
+                    }
+                }
+            }
+        }
+        
+        // Проверяем, не самоубийственный ли ход
+        const { group: ownGroup, liberties: ownLiberties } = getGroupAndLiberties(newBoardForEdit, point.r, point.c);
+        if (ownLiberties.length === 0) {
+            ownGroup.forEach(s => {
+                newBoardForEdit[s.r][s.c] = StoneColor.Empty;
+                const selfCapturedSgfCoord = utilPointToSgfCoord(s);
+                if (newSgfProps['AB']) newSgfProps['AB'] = newSgfProps['AB']!.filter(c => c !== selfCapturedSgfCoord);
+                if (newSgfProps['AW']) newSgfProps['AW'] = newSgfProps['AW']!.filter(c => c !== selfCapturedSgfCoord);
+                if (!newSgfProps['AE']) newSgfProps['AE'] = [];
+                if (!newSgfProps['AE']!.includes(selfCapturedSgfCoord)) newSgfProps['AE']!.push(selfCapturedSgfCoord);
+            });
+            if (newColorForPoint === StoneColor.Black) {
+                sessionCapturesDelta.white += ownGroup.length;
+            } else {
+                sessionCapturesDelta.black += ownGroup.length;
+            }
+        }
+    }
+    
+    // Обновляем счетчик захваченных камней
+    setEditModeCaptures(prev => ({ 
+        black: prev.black + sessionCapturesDelta.black, 
+        white: prev.white + sessionCapturesDelta.white 
+    }));
+    
+    // Переключаем игрока
+    const playerForNextEditTurn = editModePlayer === StoneColor.Black ? StoneColor.White : StoneColor.Black;
+    newSgfProps['PL'] = [playerForNextEditTurn === StoneColor.Black ? 'B' : 'W'];
+    setEditModePlayer(playerForNextEditTurn);
+    
+    // Создаём обновлённый узел
+    const updatedNode: GameTreeNode = { 
+        ...currentSgfNode, 
+        sgfProps: newSgfProps,
+        boardState: newBoardForEdit,
+        koState: { koPoint: null, boardSnapshotBeforeKoTrigger: null },
+        player: undefined,
+        coord: null,
+        stonesCapturedInThisStep: [],
+    };
+    
+    // Обновляем игровые данные
+    const updatedNodes = { ...gameData.nodes, [currentNodeId]: updatedNode };
+    const newFullGameData = {...gameData, nodes: updatedNodes};
+    setGameData(newFullGameData);
+    
+    // Явное обновление состояния доски и других свойств для немедленного отображения изменений
+    setBoardState(cloneBoard(newBoardForEdit));
+    
+    // Обновляем все состояния через updateStateFromNodeId
+    updateStateFromNodeId(currentNodeId, newFullGameData);
+    
+    console.log("Удаление камня завершено");
+  };
+
+  // Создаем простую функцию для удаления камней
+  const handleStoneRemoval = (point: Point) => {
+    if (!gameData || !currentNodeId) return;
+    
+    const currentSgfNode = gameData.nodes[currentNodeId];
+    if (!currentSgfNode) return;
+    
+    console.log("Удаляем камень/метку в позиции:", point);
+    
+    // Проверяем, есть ли камень или метка в этой точке
+    const hasStone = currentSgfNode.boardState[point.r][point.c] !== StoneColor.Empty;
+    const sgfCoord = utilPointToSgfCoord(point);
+    const newSgfProps = { ...(currentSgfNode.sgfProps || {}) };
+    
+    // Проверяем наличие меток в этой точке
+    const hasTriangle = currentTriangles.some(p => p.r === point.r && p.c === point.c);
+    const hasSquare = currentSquares.some(p => p.r === point.r && p.c === point.c);
+    const hasCircle = currentCircles.some(p => p.r === point.r && p.c === point.c);
+    const hasMark = currentMarks.some(p => p.r === point.r && p.c === point.c);
+    const hasLabel = currentLabels.some(l => l.point.r === point.r && l.point.c === point.c);
+    
+    const hasAnyMarkup = hasTriangle || hasSquare || hasCircle || hasMark || hasLabel;
+    
+    // Если нет ни камня, ни метки - ничего не делаем
+    if (!hasStone && !hasAnyMarkup) {
+        console.log("Нет камня или метки для удаления");
+        return;
+    }
+    
+    // Создаем копию доски
+    const newBoardForEdit = cloneBoard(currentSgfNode.boardState);
+    
+    // Удаляем камень, если он есть
+    if (hasStone) {
+        newBoardForEdit[point.r][point.c] = StoneColor.Empty;
+        
+        // Удаляем камень из AB/AW и добавляем в AE
+        if (newSgfProps['AB']) newSgfProps['AB'] = newSgfProps['AB'].filter(c => c !== sgfCoord);
+        if (newSgfProps['AW']) newSgfProps['AW'] = newSgfProps['AW'].filter(c => c !== sgfCoord);
+        
+        if (!newSgfProps['AE']) newSgfProps['AE'] = [];
+        if (!newSgfProps['AE'].includes(sgfCoord)) newSgfProps['AE'].push(sgfCoord);
+        
+        console.log("Камень удален");
+    }
+    
+    // Удаляем метки, если они есть
+    if (hasTriangle) {
+        if (newSgfProps['TR']) {
+            newSgfProps['TR'] = newSgfProps['TR'].filter(c => c !== sgfCoord);
+            if (newSgfProps['TR'].length === 0) delete newSgfProps['TR'];
+            console.log("Треугольник удален");
+        }
+    }
+    
+    if (hasSquare) {
+        if (newSgfProps['SQ']) {
+            newSgfProps['SQ'] = newSgfProps['SQ'].filter(c => c !== sgfCoord);
+            if (newSgfProps['SQ'].length === 0) delete newSgfProps['SQ'];
+            console.log("Квадрат удален");
+        }
+    }
+    
+    if (hasCircle) {
+        if (newSgfProps['CR']) {
+            newSgfProps['CR'] = newSgfProps['CR'].filter(c => c !== sgfCoord);
+            if (newSgfProps['CR'].length === 0) delete newSgfProps['CR'];
+            console.log("Круг удален");
+        }
+    }
+    
+    if (hasMark) {
+        if (newSgfProps['MA']) {
+            newSgfProps['MA'] = newSgfProps['MA'].filter(c => c !== sgfCoord);
+            if (newSgfProps['MA'].length === 0) delete newSgfProps['MA'];
+            console.log("Метка X удалена");
+        }
+    }
+    
+    if (hasLabel) {
+        if (newSgfProps['LB']) {
+            newSgfProps['LB'] = newSgfProps['LB'].filter(entry => !entry.startsWith(sgfCoord + ':'));
+            if (newSgfProps['LB'].length === 0) delete newSgfProps['LB'];
+            console.log("Текстовая метка удалена");
+        }
+    }
+    
+    // Создаем обновленный узел
+    const updatedNode: GameTreeNode = {
+        ...currentSgfNode,
+        sgfProps: newSgfProps,
+        boardState: newBoardForEdit,
+        koState: { koPoint: null, boardSnapshotBeforeKoTrigger: null },
+        player: undefined,
+        coord: null,
+        stonesCapturedInThisStep: [],
+    };
+    
+    // Дополнительная проверка, что доска была обновлена
+    console.log("Обновлённый узел создан, проверка доски:", 
+                updatedNode.boardState[point.r][point.c] === StoneColor.Empty);
+    
+    // Обновляем игровые данные
+    const updatedNodes = { ...gameData.nodes, [currentNodeId]: updatedNode };
+    const newFullGameData = {...gameData, nodes: updatedNodes};
+    
+    // Обновляем состояние
+    console.log("Обновляем состояние игры");
+    setGameData(newFullGameData);
+    
+    // Явное обновление состояния доски и других свойств для немедленного отображения изменений
+    setBoardState(cloneBoard(newBoardForEdit));
+    
+    // Обновляем все состояния через updateStateFromNodeId
+    updateStateFromNodeId(currentNodeId, newFullGameData);
+    
+    console.log("Удаление камня/метки завершено");
+  };
 
   const handleBoardClick = (point: Point) => {
     if (isEditMode) {
@@ -471,152 +719,70 @@ const App: React.FC = () => {
         if (activeEditTool === EditTool.EDIT_MODE_SELECT) {
             const existingStoneOnBoard = currentSgfNode.boardState[point.r][point.c];
 
-            if (existingStoneOnBoard === StoneColor.Empty) {
-                const playerMakingMove = editModePlayer;
-                const moveResult = applyMove(currentSgfNode.boardState, playerMakingMove, point, currentFullKoState);
-
-                if (moveResult.error) {
-                    alert(`Invalid move: ${moveResult.error}`);
-                    return;
-                }
-
-                const newNodeId = generateDisplayNodeId();
-                const newMoveNumber = currentSgfNode.moveNumber + 1;
-
-                const newNodeSgfProps: Record<string, string[]> = {
-                    [playerMakingMove === StoneColor.Black ? 'B' : 'W']: [sgfCoord]
-                };
-                
-                const newNode: GameTreeNode = {
-                    id: newNodeId,
-                    parentId: currentNodeId,
-                    childrenIds: [],
-                    sgfProps: newNodeSgfProps,
-                    player: playerMakingMove,
-                    coord: point,
-                    moveNumber: newMoveNumber,
-                    boardState: moveResult.newBoard,
-                    stonesCapturedInThisStep: moveResult.stonesCapturedInThisMove,
-                    totalCapturedByBlack: currentSgfNode.totalCapturedByBlack + (playerMakingMove === StoneColor.Black ? moveResult.stonesCapturedInThisMove.length : 0),
-                    totalCapturedByWhite: currentSgfNode.totalCapturedByWhite + (playerMakingMove === StoneColor.White ? moveResult.stonesCapturedInThisMove.length : 0),
-                    koState: moveResult.newKoState,
-                    isMainLineNext: false, 
-                };
-
-                const parentNode = { ...gameData.nodes[currentNodeId]! };
-                parentNode.childrenIds = [newNodeId, ...parentNode.childrenIds.filter(id => id !== newNodeId)];
-                parentNode.isMainLineNext = true; 
-
-                const newNodes = { ...gameData.nodes, [currentNodeId]: parentNode, [newNodeId]: newNode };
-                const newFullGameData = { ...gameData, nodes: newNodes };
-                setGameData(newFullGameData);
-
-                setEditModePlayer(playerMakingMove === StoneColor.Black ? StoneColor.White : StoneColor.Black);
-                const newEditCaptures = { ...editModeCaptures };
-                if (playerMakingMove === StoneColor.Black) {
-                    newEditCaptures.black += moveResult.stonesCapturedInThisMove.length;
-                } else {
-                    newEditCaptures.white += moveResult.stonesCapturedInThisMove.length;
-                }
-                setEditModeCaptures(newEditCaptures); 
-                
-                if(parentNode.isMainLineNext && parentNode.childrenIds[0] === newNodeId && newNode.moveNumber > maxMainLineMoveNumber) {
-                    setMaxMainLineMoveNumber(newNode.moveNumber);
-                }
-                
-                navigateToNode(newNodeId, newFullGameData); 
-                return; 
-
-            } else { 
-                const newSgfProps = { ...(currentSgfNode.sgfProps || {}) };
-                let newBoardForEdit = cloneBoard(currentSgfNode.boardState);
-                let newKoStateForEdit = {...currentSgfNode.koState};
-                let playerForNextEditTurn = editModePlayer;
-
-                const originalStoneColor = newBoardForEdit[point.r][point.c];
-                let newColorForPoint: StoneColor;
-
-                if (originalStoneColor === editModePlayer) {
-                    newColorForPoint = StoneColor.Empty;
-                } else { 
-                    newColorForPoint = editModePlayer;
-                }
-
-                ['AB', 'AW', 'AE'].forEach(key => {
-                    if (newSgfProps[key]) newSgfProps[key] = newSgfProps[key]!.filter(c => c !== sgfCoord);
-                    if (newSgfProps[key]?.length === 0) delete newSgfProps[key];
-                });
-                if (newColorForPoint !== StoneColor.Empty) {
-                    const propKey = newColorForPoint === StoneColor.Black ? 'AB' : 'AW';
-                    if (!newSgfProps[propKey]) newSgfProps[propKey] = [];
-                    if (!newSgfProps[propKey]!.includes(sgfCoord)) newSgfProps[propKey]!.push(sgfCoord);
-                } else {
-                    if (!newSgfProps['AE']) newSgfProps['AE'] = [];
-                    if (!newSgfProps['AE']!.includes(sgfCoord)) newSgfProps['AE']!.push(sgfCoord);
-                }
-                delete newSgfProps['B']; delete newSgfProps['W']; 
-
-                newBoardForEdit[point.r][point.c] = newColorForPoint;
-                
-                let sessionCapturesDelta = { black: 0, white: 0 };
-                const opponentOfModifiedStone = newColorForPoint === StoneColor.Black ? StoneColor.White : (newColorForPoint === StoneColor.White ? StoneColor.Black : undefined);
-
-                if (newColorForPoint !== StoneColor.Empty) { 
-                    const neighbors = [{r:point.r-1,c:point.c},{r:point.r+1,c:point.c},{r:point.r,c:point.c-1},{r:point.r,c:point.c+1}];
-                    for (const n of neighbors) {
-                        if (n.r >= 0 && n.r < boardSize && n.c >= 0 && n.c < boardSize && newBoardForEdit[n.r][n.c] === opponentOfModifiedStone) {
-                            const { group, liberties } = getGroupAndLiberties(newBoardForEdit, n.r, n.c);
-                            if (liberties.length === 0) {
-                                group.forEach(s => {
-                                    newBoardForEdit[s.r][s.c] = StoneColor.Empty;
-                                    const capturedSgfCoord = utilPointToSgfCoord(s);
-                                    if (newSgfProps['AB']) newSgfProps['AB'] = newSgfProps['AB']!.filter(c => c !== capturedSgfCoord);
-                                    if (newSgfProps['AW']) newSgfProps['AW'] = newSgfProps['AW']!.filter(c => c !== capturedSgfCoord);
-                                    if (!newSgfProps['AE']) newSgfProps['AE'] = [];
-                                    if (!newSgfProps['AE']!.includes(capturedSgfCoord)) newSgfProps['AE']!.push(capturedSgfCoord);
-                                    if (opponentOfModifiedStone === StoneColor.Black) sessionCapturesDelta.white++; 
-                                    else sessionCapturesDelta.black++; 
-                                });
-                            }
-                        }
-                    }
-                    const { group: ownGroup, liberties: ownLiberties } = getGroupAndLiberties(newBoardForEdit, point.r, point.c);
-                    if (ownLiberties.length === 0) { 
-                        ownGroup.forEach(s => {
-                             newBoardForEdit[s.r][s.c] = StoneColor.Empty;
-                             const selfCapturedSgfCoord = utilPointToSgfCoord(s);
-                             if (newSgfProps['AB']) newSgfProps['AB'] = newSgfProps['AB']!.filter(c => c !== selfCapturedSgfCoord);
-                             if (newSgfProps['AW']) newSgfProps['AW'] = newSgfProps['AW']!.filter(c => c !== selfCapturedSgfCoord);
-                             if (!newSgfProps['AE']) newSgfProps['AE'] = [];
-                             if (!newSgfProps['AE']!.includes(selfCapturedSgfCoord)) newSgfProps['AE']!.push(selfCapturedSgfCoord);
-                        });
-                        if (newColorForPoint === StoneColor.Black) sessionCapturesDelta.white += ownGroup.length;
-                        else sessionCapturesDelta.black += ownGroup.length;
-                    }
-                }
-                
-                setEditModeCaptures(prev => ({ black: prev.black + sessionCapturesDelta.black, white: prev.white + sessionCapturesDelta.white }));
-                playerForNextEditTurn = editModePlayer === StoneColor.Black ? StoneColor.White : StoneColor.Black;
-                newSgfProps['PL'] = [playerForNextEditTurn];
-                newKoStateForEdit = { koPoint: null, boardSnapshotBeforeKoTrigger: null };
-
-                setEditModePlayer(playerForNextEditTurn);
-
-                const updatedNode: GameTreeNode = { 
-                    ...currentSgfNode, 
-                    sgfProps: newSgfProps,
-                    boardState: newBoardForEdit,
-                    koState: newKoStateForEdit,
-                    player: undefined, // Setup node, not a move
-                    coord: null,       // Setup node, not a move
-                    stonesCapturedInThisStep: [], // Setup actions don't count as SGF "move captures"
-                };
-                const updatedNodes = { ...gameData.nodes, [currentNodeId]: updatedNode };
-                const newFullGameData = {...gameData, nodes: updatedNodes};
-                setGameData(newFullGameData);
-                updateStateFromNodeId(currentNodeId, newFullGameData);
+            // Если клик на существующий камень - удаляем его
+            if (existingStoneOnBoard !== StoneColor.Empty) {
+                console.log("Клик на существующий камень в режиме SELECT, удаляем камень");
+                handleStoneRemoval(point);
                 return;
             }
+            
+            // Если клик на пустую клетку - делаем ход
+            const playerMakingMove = editModePlayer;
+            const moveResult = applyMove(currentSgfNode.boardState, playerMakingMove, point, currentFullKoState);
+
+            if (moveResult.error) {
+                alert(`Invalid move: ${moveResult.error}`);
+                return;
+            }
+
+            console.log("Добавляем новый ход в режиме SELECT");
+            const newNodeId = generateDisplayNodeId();
+            const newMoveNumber = currentSgfNode.moveNumber + 1;
+
+            const newNodeSgfProps: Record<string, string[]> = {
+                [playerMakingMove === StoneColor.Black ? 'B' : 'W']: [sgfCoord]
+            };
+            
+            const newNode: GameTreeNode = {
+                id: newNodeId,
+                parentId: currentNodeId,
+                childrenIds: [],
+                sgfProps: newNodeSgfProps,
+                player: playerMakingMove,
+                coord: point,
+                moveNumber: newMoveNumber,
+                boardState: moveResult.newBoard,
+                stonesCapturedInThisStep: moveResult.stonesCapturedInThisMove,
+                totalCapturedByBlack: currentSgfNode.totalCapturedByBlack + (playerMakingMove === StoneColor.Black ? moveResult.stonesCapturedInThisMove.length : 0),
+                totalCapturedByWhite: currentSgfNode.totalCapturedByWhite + (playerMakingMove === StoneColor.White ? moveResult.stonesCapturedInThisMove.length : 0),
+                koState: moveResult.newKoState,
+                isMainLineNext: false, 
+            };
+
+            const parentNode = { ...gameData.nodes[currentNodeId]! };
+            parentNode.childrenIds = [newNodeId, ...parentNode.childrenIds.filter(id => id !== newNodeId)];
+            parentNode.isMainLineNext = true; 
+
+            const newNodes = { ...gameData.nodes, [currentNodeId]: parentNode, [newNodeId]: newNode };
+            const newFullGameData = { ...gameData, nodes: newNodes };
+            setGameData(newFullGameData);
+
+            setEditModePlayer(playerMakingMove === StoneColor.Black ? StoneColor.White : StoneColor.Black);
+            const newEditCaptures = { ...editModeCaptures };
+            if (playerMakingMove === StoneColor.Black) {
+                newEditCaptures.black += moveResult.stonesCapturedInThisMove.length;
+            } else {
+                newEditCaptures.white += moveResult.stonesCapturedInThisMove.length;
+            }
+            setEditModeCaptures(newEditCaptures); 
+            
+            if(parentNode.isMainLineNext && parentNode.childrenIds[0] === newNodeId && newNode.moveNumber > maxMainLineMoveNumber) {
+                setMaxMainLineMoveNumber(newNode.moveNumber);
+            }
+            
+            navigateToNode(newNodeId, newFullGameData); 
+            return; 
+
         }
         
         // Logic for specific edit tools (Place Black/White, Erase, Markup)
@@ -626,10 +792,8 @@ const App: React.FC = () => {
 
         switch(activeEditTool) {
             case EditTool.PLACE_BLACK:
-            case EditTool.PLACE_WHITE:
-            case EditTool.REMOVE_STONE: {
-                const stoneColor = activeEditTool === EditTool.PLACE_BLACK ? StoneColor.Black :
-                                activeEditTool === EditTool.PLACE_WHITE ? StoneColor.White : StoneColor.Empty;
+            case EditTool.PLACE_WHITE: {
+                const stoneColor = activeEditTool === EditTool.PLACE_BLACK ? StoneColor.Black : StoneColor.White;
                 
                 let boardAfterStoneTool = cloneBoard(currentSgfNode.boardState);
                 boardAfterStoneTool[point.r][point.c] = stoneColor;
@@ -640,52 +804,46 @@ const App: React.FC = () => {
                     if (newSgfProps[key]?.length === 0) delete newSgfProps[key];
                 });
 
-                if (stoneColor !== StoneColor.Empty) {
-                    const propKey = stoneColor === StoneColor.Black ? 'AB' : 'AW';
-                    if (!newSgfProps[propKey]) newSgfProps[propKey] = [];
-                    if (!newSgfProps[propKey]!.includes(sgfCoord)) newSgfProps[propKey]!.push(sgfCoord);
-                } else { // REMOVE_STONE
-                    if (!newSgfProps['AE']) newSgfProps['AE'] = [];
-                    if (!newSgfProps['AE']!.includes(sgfCoord)) newSgfProps['AE']!.push(sgfCoord);
-                }
+                const propKey = stoneColor === StoneColor.Black ? 'AB' : 'AW';
+                if (!newSgfProps[propKey]) newSgfProps[propKey] = [];
+                if (!newSgfProps[propKey]!.includes(sgfCoord)) newSgfProps[propKey]!.push(sgfCoord);
                 
                 delete newSgfProps['B']; delete newSgfProps['W']; // This node becomes a setup node
 
                 let sessionCapturesDelta = { black: 0, white: 0 };
-                const opponentOfPlacedStone = stoneColor === StoneColor.Black ? StoneColor.White : (stoneColor === StoneColor.White ? StoneColor.Black : undefined);
+                const opponentOfPlacedStone = stoneColor === StoneColor.Black ? StoneColor.White : StoneColor.Black;
                 
-                if (stoneColor !== StoneColor.Empty && opponentOfPlacedStone) { 
-                    const neighbors = [{r:point.r-1,c:point.c},{r:point.r+1,c:point.c},{r:point.r,c:point.c-1},{r:point.r,c:point.c+1}];
-                    for (const n of neighbors) {
-                        if (n.r >= 0 && n.r < boardSize && n.c >= 0 && n.c < boardSize && boardAfterStoneTool[n.r][n.c] === opponentOfPlacedStone) {
-                            const { group, liberties } = getGroupAndLiberties(boardAfterStoneTool, n.r, n.c);
-                            if (liberties.length === 0) {
-                                group.forEach(s => {
-                                    boardAfterStoneTool[s.r][s.c] = StoneColor.Empty;
-                                    const capturedSgfCoord = utilPointToSgfCoord(s);
-                                     if (newSgfProps['AB']) newSgfProps['AB'] = newSgfProps['AB']!.filter(c => c !== capturedSgfCoord);
-                                     if (newSgfProps['AW']) newSgfProps['AW'] = newSgfProps['AW']!.filter(c => c !== capturedSgfCoord);
-                                     if (!newSgfProps['AE']) newSgfProps['AE'] = [];
-                                     if (!newSgfProps['AE']!.includes(capturedSgfCoord)) newSgfProps['AE']!.push(capturedSgfCoord);
-                                    if (opponentOfPlacedStone === StoneColor.Black) sessionCapturesDelta.white++; 
-                                    else sessionCapturesDelta.black++; 
-                                });
-                            }
+                // Обрабатываем захват камней соперника после размещения
+                const neighbors = [{r:point.r-1,c:point.c},{r:point.r+1,c:point.c},{r:point.r,c:point.c-1},{r:point.r,c:point.c+1}];
+                for (const n of neighbors) {
+                    if (n.r >= 0 && n.r < boardSize && n.c >= 0 && n.c < boardSize && boardAfterStoneTool[n.r][n.c] === opponentOfPlacedStone) {
+                        const { group, liberties } = getGroupAndLiberties(boardAfterStoneTool, n.r, n.c);
+                        if (liberties.length === 0) {
+                            group.forEach(s => {
+                                boardAfterStoneTool[s.r][s.c] = StoneColor.Empty;
+                                const capturedSgfCoord = utilPointToSgfCoord(s);
+                                 if (newSgfProps['AB']) newSgfProps['AB'] = newSgfProps['AB']!.filter(c => c !== capturedSgfCoord);
+                                 if (newSgfProps['AW']) newSgfProps['AW'] = newSgfProps['AW']!.filter(c => c !== capturedSgfCoord);
+                                 if (!newSgfProps['AE']) newSgfProps['AE'] = [];
+                                 if (!newSgfProps['AE']!.includes(capturedSgfCoord)) newSgfProps['AE']!.push(capturedSgfCoord);
+                                if (opponentOfPlacedStone === StoneColor.Black) sessionCapturesDelta.white++; 
+                                else sessionCapturesDelta.black++; 
+                            });
                         }
                     }
-                    // Check for suicide after captures
-                    const { group: ownGroup, liberties: ownLiberties } = getGroupAndLiberties(boardAfterStoneTool, point.r, point.c);
-                    if (ownLiberties.length === 0) { 
-                        ownGroup.forEach(s => {
-                             boardAfterStoneTool[s.r][s.c] = StoneColor.Empty; // Remove self-captured group
-                             const selfCapturedSgfCoord = utilPointToSgfCoord(s);
-                             if (newSgfProps['AB']) newSgfProps['AB'] = newSgfProps['AB']!.filter(c => c !== selfCapturedSgfCoord);
-                             if (newSgfProps['AW']) newSgfProps['AW'] = newSgfProps['AW']!.filter(c => c !== selfCapturedSgfCoord);
-                             if (!newSgfProps['AE']) newSgfProps['AE'] = [];
-                             if (!newSgfProps['AE']!.includes(selfCapturedSgfCoord)) newSgfProps['AE']!.push(selfCapturedSgfCoord);
-                        });
-                         // These stones don't count as captures for the opponent in SGF terms, but are removed.
-                    }
+                }
+                // Check for suicide after captures
+                const { group: ownGroup, liberties: ownLiberties } = getGroupAndLiberties(boardAfterStoneTool, point.r, point.c);
+                if (ownLiberties.length === 0) { 
+                    ownGroup.forEach(s => {
+                         boardAfterStoneTool[s.r][s.c] = StoneColor.Empty; // Remove self-captured group
+                         const selfCapturedSgfCoord = utilPointToSgfCoord(s);
+                         if (newSgfProps['AB']) newSgfProps['AB'] = newSgfProps['AB']!.filter(c => c !== selfCapturedSgfCoord);
+                         if (newSgfProps['AW']) newSgfProps['AW'] = newSgfProps['AW']!.filter(c => c !== selfCapturedSgfCoord);
+                         if (!newSgfProps['AE']) newSgfProps['AE'] = [];
+                         if (!newSgfProps['AE']!.includes(selfCapturedSgfCoord)) newSgfProps['AE']!.push(selfCapturedSgfCoord);
+                    });
+                     // These stones don't count as captures for the opponent in SGF terms, but are removed.
                 }
                 setEditModeCaptures(prev => ({ black: prev.black + sessionCapturesDelta.black, white: prev.white + sessionCapturesDelta.white }));
                 
@@ -696,9 +854,14 @@ const App: React.FC = () => {
                     koState: { koPoint: null, boardSnapshotBeforeKoTrigger: null }, // Reset Ko for setup
                     player: undefined, // Setup node
                     coord: null,       // Setup node
-                    stonesCapturedInThisStep: [], // Setup actions are not "move captures"
+                    stonesCapturedInThisStep: [], // Setup actions don't count as SGF "move captures"
                 };
                 break;
+            }
+            case EditTool.REMOVE_STONE: {
+                // Используем новую функцию для удаления камней
+                handleStoneRemoval(point);
+                return;
             }
             case EditTool.ADD_TRIANGLE:
             case EditTool.ADD_SQUARE:
@@ -754,7 +917,7 @@ const App: React.FC = () => {
         const updatedNodes = { ...gameData.nodes, [currentNodeId]: updatedNode };
         const newFullGameData = {...gameData, nodes: updatedNodes};
         setGameData(newFullGameData);
-        updateStateFromNodeId(currentNodeId, newFullGameData); 
+        updateStateFromNodeId(currentNodeId, newFullGameData);
 
     } else { 
         if (!gameData || !currentNodeId ) {

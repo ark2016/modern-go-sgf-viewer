@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { StoneColor, Point, LabelInfo } from '../types';
 
@@ -69,49 +68,73 @@ const GoBoard: React.FC<GoBoardProps> = ({
     const strokeColor = "blue"; // Default markup color
     const strokeWidth = Math.max(1, cellSize / 15);
 
+    // Добавляем невидимую кликабельную область для всех типов маркеров
+    const invisibleClickArea = onIntersectionClick && (
+      <circle
+        key={`click-${type}-${index}`}
+        cx={cx}
+        cy={cy}
+        r={cellSize / 3}
+        fill="transparent"
+        className="cursor-pointer"
+        onClick={() => onIntersectionClick(point)}
+        style={{ pointerEvents: boardState[point.r][point.c] !== StoneColor.Empty ? 'none' : 'auto' }}
+      />
+    );
+
     switch (type) {
       case 'triangle':
         return (
-          <polygon
-            key={`triangle-${index}`}
-            points={`${cx},${cy - size} ${cx - size * 0.866},${cy + size * 0.5} ${cx + size * 0.866},${cy + size * 0.5}`}
-            fill="none"
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-            className="pointer-events-none"
-          />
+          <React.Fragment key={`triangle-wrapper-${index}`}>
+            {invisibleClickArea}
+            <polygon
+              key={`triangle-${index}`}
+              points={`${cx},${cy - size} ${cx - size * 0.866},${cy + size * 0.5} ${cx + size * 0.866},${cy + size * 0.5}`}
+              fill="none"
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+              className="pointer-events-none"
+            />
+          </React.Fragment>
         );
       case 'square':
         return (
-          <rect
-            key={`square-${index}`}
-            x={cx - size / 1.4}
-            y={cy - size / 1.4}
-            width={size * 1.4}
-            height={size * 1.4}
-            fill="none"
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-            className="pointer-events-none"
-          />
+          <React.Fragment key={`square-wrapper-${index}`}>
+            {invisibleClickArea}
+            <rect
+              key={`square-${index}`}
+              x={cx - size / 1.4}
+              y={cy - size / 1.4}
+              width={size * 1.4}
+              height={size * 1.4}
+              fill="none"
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+              className="pointer-events-none"
+            />
+          </React.Fragment>
         );
       case 'circle':
         return (
-          <circle
-            key={`circle-${index}`}
-            cx={cx}
-            cy={cy}
-            r={size * 0.8}
-            fill="none"
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-            className="pointer-events-none"
-          />
+          <React.Fragment key={`circle-wrapper-${index}`}>
+            {invisibleClickArea}
+            <circle
+              key={`circle-${index}`}
+              cx={cx}
+              cy={cy}
+              r={size * 0.8}
+              fill="none"
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+              className="pointer-events-none"
+            />
+          </React.Fragment>
         );
       case 'mark': // X-Mark
         const d = size * 0.7;
         return (
-          <React.Fragment key={`mark-${index}`}>
+          <React.Fragment key={`mark-wrapper-${index}`}>
+            {invisibleClickArea}
             <line x1={cx - d} y1={cy - d} x2={cx + d} y2={cy + d} stroke={strokeColor} strokeWidth={strokeWidth} className="pointer-events-none" />
             <line x1={cx + d} y1={cy - d} x2={cx - d} y2={cy + d} stroke={strokeColor} strokeWidth={strokeWidth} className="pointer-events-none" />
           </React.Fragment>
@@ -156,6 +179,7 @@ const GoBoard: React.FC<GoBoardProps> = ({
               className="cursor-pointer hover:bg-gray-400 hover:bg-opacity-20"
               onClick={() => onIntersectionClick({ r, c })}
               aria-label={`Play at column ${String.fromCharCode(65+c)}, row ${r+1}`}
+              style={{ pointerEvents: boardState[r][c] !== StoneColor.Empty ? 'none' : 'auto' }}
             />
           ))
         )}
@@ -175,7 +199,8 @@ const GoBoard: React.FC<GoBoardProps> = ({
                   fill={stone === StoneColor.Black ? 'black' : 'white'}
                   stroke={stone === StoneColor.Black ? '#222' : '#ccc'} 
                   strokeWidth="1"
-                  className="stone-shadow"
+                  className="stone-shadow cursor-pointer"
+                  onClick={onIntersectionClick ? () => onIntersectionClick({ r, c }) : undefined}
                 />
                 {isLastMove && (
                   <circle
@@ -213,20 +238,35 @@ const GoBoard: React.FC<GoBoardProps> = ({
           }
           
           return (
-            <text
-              key={`label-${index}`}
-              x={cx}
-              y={cy}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fontSize={stoneRadius * 0.8} // Adjust size relative to stone
-              fill={textColor}
-              fontWeight="bold"
-              className="pointer-events-none select-none"
-              aria-label={`Label "${labelInfo.text}" at column ${String.fromCharCode(65+labelInfo.point.c)}, row ${labelInfo.point.r+1}`}
-            >
-              {labelInfo.text.substring(0,3)} {/* SGF labels typically short */}
-            </text>
+            <g key={`label-group-${index}`}>
+              {/* Невидимая кликабельная область для метки */}
+              {onIntersectionClick && (
+                <circle
+                  key={`label-click-${index}`}
+                  cx={cx}
+                  cy={cy}
+                  r={cellSize / 3}
+                  fill="transparent"
+                  className="cursor-pointer"
+                  onClick={() => onIntersectionClick(labelInfo.point)}
+                  style={{ pointerEvents: 'auto' }}
+                />
+              )}
+              <text
+                key={`label-${index}`}
+                x={cx}
+                y={cy}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={stoneRadius * 0.8} // Adjust size relative to stone
+                fill={textColor}
+                fontWeight="bold"
+                className="pointer-events-none select-none"
+                aria-label={`Label "${labelInfo.text}" at column ${String.fromCharCode(65+labelInfo.point.c)}, row ${labelInfo.point.r+1}`}
+              >
+                {labelInfo.text.substring(0,3)} {/* SGF labels typically short */}
+              </text>
+            </g>
           );
         })}
 

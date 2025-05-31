@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { EditTool } from '../types';
 
@@ -12,7 +11,7 @@ export const toolDisplayInfo: Record<string, { label: string; icon?: string, hot
   [EditTool.EDIT_MODE_SELECT]: { label: "Select", icon: "☝️" },
   [EditTool.PLACE_BLACK]: { label: "Black", icon: "⚫" },
   [EditTool.PLACE_WHITE]: { label: "White", icon: "⚪" },
-  [EditTool.REMOVE_STONE]: { label: "Erase", icon: "❌" },
+  [EditTool.REMOVE_STONE]: { label: "Erase All", icon: "❌" },
   [EditTool.ADD_TRIANGLE]: { label: "Triangle", icon: "△", hotkey: "F4" },
   [EditTool.ADD_SQUARE]: { label: "Square", icon: "□", hotkey: "F5" },
   [EditTool.ADD_CIRCLE]: { label: "Circle", icon: "○", hotkey: "F6" },
