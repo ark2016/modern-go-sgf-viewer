@@ -545,6 +545,24 @@ const GoBoard: React.FC<GoBoardProps> = ({
             textColor = '#0047AB'; // Кобальтовый синий для лучшей видимости
           }
           
+          // Определяем позицию для отображения эмодзи или метки
+          const isEmoji = labelInfo.isEmoji || false;
+          const position = labelInfo.position || (isEmoji ? 'topRight' : 'center');
+          
+          // Вычисляем координаты в зависимости от позиции
+          let textX = cx;
+          let textY = cy;
+          let textAnchor = "middle";
+          let baseline = "central";
+          let fontSize = stoneRadius * (isEmoji ? 1.2 : 1.0); // Немного увеличиваем размер эмодзи
+          
+          if (position === 'topRight') {
+            textX = cx + stoneRadius * 0.6;
+            textY = cy - stoneRadius * 0.6;
+            textAnchor = "middle";
+            baseline = "middle";
+          }
+          
           return (
             <g key={`label-group-${index}`}>
               {/* Невидимая кликабельная область для метки */}
@@ -562,18 +580,18 @@ const GoBoard: React.FC<GoBoardProps> = ({
               )}
               <text
                 key={`label-${index}`}
-                x={cx}
-                y={cy}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fontSize={stoneRadius * 1.0} // Увеличенный размер текста
+                x={textX}
+                y={textY}
+                textAnchor={textAnchor}
+                dominantBaseline={baseline}
+                fontSize={fontSize}
                 fill={textColor}
-                fontWeight="bold"
-                filter="drop-shadow(0 0 1px rgba(0,0,0,0.3))"
+                fontWeight={isEmoji ? "normal" : "bold"}
+                filter={isEmoji ? "" : "drop-shadow(0 0 1px rgba(0,0,0,0.3))"}
                 className="pointer-events-none select-none"
-                aria-label={`Label "${labelInfo.text}" at column ${String.fromCharCode(65+labelInfo.point.c)}, row ${labelInfo.point.r+1}`}
+                aria-label={`${isEmoji ? 'Emoji' : 'Label'} "${labelInfo.text}" at column ${String.fromCharCode(65+labelInfo.point.c)}, row ${labelInfo.point.r+1}`}
               >
-                {labelInfo.text.substring(0,3)} {/* SGF labels typically short */}
+                {isEmoji ? labelInfo.text : labelInfo.text.substring(0,3)} {/* Эмодзи отображаем полностью, обычные метки - макс 3 символа */}
               </text>
             </g>
           );

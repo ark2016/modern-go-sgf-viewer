@@ -110,6 +110,8 @@ export interface ParsedMove {
 export interface LabelInfo {
   point: Point;
   text: string;
+  isEmoji?: boolean; // Указывает, что это эмодзи, а не обычная метка
+  position?: 'center' | 'topRight'; // Позиция метки, по умолчанию center, для эмодзи - topRight
 }
 
 // For Edit Mode Toolbar

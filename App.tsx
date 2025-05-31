@@ -10,6 +10,7 @@ import { parseSgf, sgfCoordToPoint, pointToSgfCoord as utilPointToSgfCoord } fro
 import { generateSgfString } from './services/sgfGenerator';
 import { createEmptyBoard, applyMove, cloneBoard, getGroupAndLiberties } from './services/goLogic';
 import { DEFAULT_BOARD_SIZE, DEFAULT_KOMI } from './constants'; 
+import EmojiPicker from './components/EmojiPicker';
 
 // Helper to generate unique IDs for nodes created in edit mode or normal play
 function generateDisplayNodeId(): string {
@@ -29,7 +30,7 @@ const parseSgfPointList = (propValues: string[] | undefined, boardSize: number):
 };
 
 // Helper function to parse SGF LB (Label) properties
-const parseSgfLabels = (propValues: string[] | undefined, boardSize: number): LabelInfo[] => {
+const parseSgfLabels = (propValues: string[] | undefined, boardSize: number, emojiPoints?: string[]): LabelInfo[] => {
   if (!propValues) return [];
   return propValues.reduce((acc, sgfLabel) => {
     const parts = sgfLabel.split(':');
@@ -37,7 +38,14 @@ const parseSgfLabels = (propValues: string[] | undefined, boardSize: number): La
       const point = sgfCoordToPoint(parts[0]);
       const text = parts[1];
       if (point && text && point.r < boardSize && point.c < boardSize) {
-        acc.push({ point, text });
+        // Проверяем, является ли эта метка эмодзи
+        const isEmoji = emojiPoints?.includes(parts[0]) || false;
+        acc.push({ 
+          point, 
+          text,
+          isEmoji,
+          position: isEmoji ? 'topRight' : 'center'
+        });
       }
     }
     return acc;
@@ -202,6 +210,11 @@ const App: React.FC = () => {
   // Добавляем состояние для цвета рисования
   const [currentDrawingColor, setCurrentDrawingColor] = useState<string>("#FF4500"); // Оранжево-красный по умолчанию
 
+  // Внутри компонента App добавляем новые состояния для работы с EmojiPicker
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState<boolean>(false);
+  const [emojiPickerPosition, setEmojiPickerPosition] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
+  const [currentEmojiPoint, setCurrentEmojiPoint] = useState<Point | null>(null);
+
   const updateStateFromNodeId = useCallback((nodeId: string | null, newGameData?: FullGameData | null) => { 
     const dataToUse = newGameData === undefined ? gameData : newGameData; 
     
@@ -248,7 +261,7 @@ const App: React.FC = () => {
     setCurrentSquares(parseSgfPointList(sgfProps['SQ'], currentBoardSize));
     setCurrentCircles(parseSgfPointList(sgfProps['CR'], currentBoardSize));
     setCurrentMarks(parseSgfPointList(sgfProps['MA'], currentBoardSize));
-    setCurrentLabels(parseSgfLabels(sgfProps['LB'], currentBoardSize));
+    setCurrentLabels(parseSgfLabels(sgfProps['LB'], currentBoardSize, sgfProps['EM']));
     
     // Загружаем линии, стрелки и пути
     setCurrentLines(parseSgfLinesList(sgfProps['LN'], currentBoardSize));
@@ -1038,23 +1051,23 @@ const App: React.FC = () => {
             }
             case EditTool.ADD_LABEL: {
                 const existingLabel = currentLabels.find(l => l.point.r === point.r && l.point.c === point.c);
-                const labelText = prompt("Enter label text (e.g., A, 1, text):", existingLabel ? existingLabel.text : "");
                 
-                if (labelText !== null) { // User didn't cancel prompt
-                    let lbList = newSgfProps['LB'] ? [...newSgfProps['LB']] : [];
-                    const coordPrefix = sgfCoord + ':';
-                    lbList = lbList.filter(item => !item.startsWith(coordPrefix)); // Remove existing label for this coordinate
-
-                    if (labelText !== "") { // If new text is provided, add it
-                        lbList.push(`${sgfCoord}:${labelText}`);
-                    }
-                    // If labelText is empty, it means remove the label, which filter already did.
+                // Устанавливаем позицию для пикера эмодзи
+                const boardElement = document.querySelector('.go-board-bg');
+                if (boardElement) {
+                    const rect = boardElement.getBoundingClientRect();
+                    // Для каждой точки находим ее координаты на экране
+                    const cellSize = getCellSize(boardSize);
+                    const padding = cellSize / 2;
+                    const pointX = rect.left + padding + point.c * cellSize;
+                    const pointY = rect.top + padding + point.r * cellSize;
                     
-                    if (lbList.length > 0) newSgfProps['LB'] = lbList;
-                    else delete newSgfProps['LB'];
+                    // Открываем пикер эмодзи
+                    setEmojiPickerPosition({ x: pointX, y: pointY });
+                    setIsEmojiPickerOpen(true);
+                    setCurrentEmojiPoint(point);
                 }
-                updatedNode = { ...currentSgfNode, sgfProps: newSgfProps };
-                break;
+                return; // Выходим, ожидая выбора эмодзи
             }
             case EditTool.ADD_NUMBER: {
                 // Считаем уже существующие числовые метки, чтобы определить следующий номер
@@ -1671,6 +1684,46 @@ const App: React.FC = () => {
     setCurrentFreehandPath([]);
   };
 
+  // Добавляем функцию для обработки выбора эмодзи
+  const handleEmojiSelect = (emoji: string) => {
+      setIsEmojiPickerOpen(false);
+      
+      if (!currentEmojiPoint || !gameData || !currentNodeId) return;
+      
+      const currentSgfNode = gameData.nodes[currentNodeId];
+      if (!currentSgfNode) return;
+      
+      const point = currentEmojiPoint;
+      const sgfCoord = utilPointToSgfCoord(point);
+      const newSgfProps = { ...(currentSgfNode.sgfProps || {}) };
+      
+      // Обрабатываем выбор эмодзи
+      let lbList = newSgfProps['LB'] ? [...newSgfProps['LB']] : [];
+      const coordPrefix = sgfCoord + ':';
+      lbList = lbList.filter(item => !item.startsWith(coordPrefix)); // Remove existing label
+      
+      if (emoji !== "") {
+          lbList.push(`${sgfCoord}:${emoji}`);
+          
+          // Добавляем кастомное свойство для отметки эмодзи
+          if (!newSgfProps['EM']) newSgfProps['EM'] = [];
+          if (!newSgfProps['EM'].includes(sgfCoord)) {
+              newSgfProps['EM'].push(sgfCoord);
+          }
+      }
+      
+      if (lbList.length > 0) newSgfProps['LB'] = lbList;
+      else delete newSgfProps['LB'];
+      
+      const updatedNode = { ...currentSgfNode, sgfProps: newSgfProps };
+      const updatedNodes = { ...gameData.nodes, [currentNodeId]: updatedNode };
+      const newFullGameData = {...gameData, nodes: updatedNodes};
+      setGameData(newFullGameData);
+      updateStateFromNodeId(currentNodeId, newFullGameData);
+      
+      setCurrentEmojiPoint(null);
+  };
+
   return (
     <div className="min-h-screen bg-gray-200 dark:bg-gray-900 py-4 px-2 sm:px-4 lg:px-6 text-gray-800 dark:text-gray-200">
       <header className="text-center mb-6">
@@ -1854,6 +1907,14 @@ const App: React.FC = () => {
       <footer className="text-center mt-12 py-4 text-gray-600 dark:text-gray-300 text-sm">
         Go Board SGF Viewer - Advanced Baduk/Weiqi Experience
       </footer>
+      
+      {/* Добавляем EmojiPicker */}
+      <EmojiPicker
+        isOpen={isEmojiPickerOpen}
+        position={emojiPickerPosition}
+        onClose={() => setIsEmojiPickerOpen(false)}
+        onSelect={handleEmojiSelect}
+      />
     </div>
   );
 };

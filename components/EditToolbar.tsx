@@ -16,7 +16,7 @@ export const toolDisplayInfo: Record<string, { label: string; icon?: string, hot
   [EditTool.ADD_SQUARE]: { label: "Square", icon: "□", hotkey: "F5" },
   [EditTool.ADD_CIRCLE]: { label: "Circle", icon: "○", hotkey: "F6" },
   [EditTool.ADD_MARK_X]: { label: "Mark (X)", icon: "✕", hotkey: "F7" },
-  [EditTool.ADD_LABEL]: { label: "Label (A/1)", icon: "Aa", hotkey: "F8" },
+  [EditTool.ADD_LABEL]: { label: "Emoji", icon: "😀", hotkey: "F8" },
   [EditTool.ADD_NUMBER]: { label: "Numbers", icon: "123", hotkey: "F9" },
   [EditTool.ADD_LETTER]: { label: "Letters", icon: "ABC", hotkey: "F10" },
   [EditTool.DRAWING_MODE]: { label: "Drawing", icon: "🖌️", hotkey: "D" },
