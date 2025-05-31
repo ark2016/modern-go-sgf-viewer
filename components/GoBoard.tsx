@@ -64,9 +64,9 @@ const GoBoard: React.FC<GoBoardProps> = ({
   ) => {
     const cx = padding + point.c * cellSize;
     const cy = padding + point.r * cellSize;
-    const size = stoneRadius * 0.9; // Relative size for markup
-    const strokeColor = "blue"; // Default markup color
-    const strokeWidth = Math.max(1, cellSize / 15);
+    const size = stoneRadius * 1.1; // Увеличенный размер для маркеров
+    const strokeColor = "#0047AB"; // Кобальтовый синий для лучшей видимости
+    const strokeWidth = Math.max(2, cellSize / 10); // Дополнительно увеличенная толщина линий
 
     // Добавляем невидимую кликабельную область для всех типов маркеров
     const invisibleClickArea = onIntersectionClick && (
@@ -93,6 +93,7 @@ const GoBoard: React.FC<GoBoardProps> = ({
               fill="none"
               stroke={strokeColor}
               strokeWidth={strokeWidth}
+              filter="drop-shadow(0 0 1px rgba(0,0,0,0.3))"
               className="pointer-events-none"
             />
           </React.Fragment>
@@ -103,13 +104,14 @@ const GoBoard: React.FC<GoBoardProps> = ({
             {invisibleClickArea}
             <rect
               key={`square-${index}`}
-              x={cx - size / 1.4}
-              y={cy - size / 1.4}
-              width={size * 1.4}
-              height={size * 1.4}
+              x={cx - size / 1.2}
+              y={cy - size / 1.2}
+              width={size * 1.6}
+              height={size * 1.6}
               fill="none"
               stroke={strokeColor}
               strokeWidth={strokeWidth}
+              filter="drop-shadow(0 0 1px rgba(0,0,0,0.3))"
               className="pointer-events-none"
             />
           </React.Fragment>
@@ -122,21 +124,22 @@ const GoBoard: React.FC<GoBoardProps> = ({
               key={`circle-${index}`}
               cx={cx}
               cy={cy}
-              r={size * 0.8}
+              r={size * 0.9}
               fill="none"
               stroke={strokeColor}
               strokeWidth={strokeWidth}
+              filter="drop-shadow(0 0 1px rgba(0,0,0,0.3))"
               className="pointer-events-none"
             />
           </React.Fragment>
         );
       case 'mark': // X-Mark
-        const d = size * 0.7;
+        const d = size * 0.8;
         return (
           <React.Fragment key={`mark-wrapper-${index}`}>
             {invisibleClickArea}
-            <line x1={cx - d} y1={cy - d} x2={cx + d} y2={cy + d} stroke={strokeColor} strokeWidth={strokeWidth} className="pointer-events-none" />
-            <line x1={cx + d} y1={cy - d} x2={cx - d} y2={cy + d} stroke={strokeColor} strokeWidth={strokeWidth} className="pointer-events-none" />
+            <line x1={cx - d} y1={cy - d} x2={cx + d} y2={cy + d} stroke={strokeColor} strokeWidth={strokeWidth} filter="drop-shadow(0 0 1px rgba(0,0,0,0.3))" className="pointer-events-none" />
+            <line x1={cx + d} y1={cy - d} x2={cx - d} y2={cy + d} stroke={strokeColor} strokeWidth={strokeWidth} filter="drop-shadow(0 0 1px rgba(0,0,0,0.3))" className="pointer-events-none" />
           </React.Fragment>
         );
       default:
@@ -234,7 +237,7 @@ const GoBoard: React.FC<GoBoardProps> = ({
           } else if (stoneAtLabel === StoneColor.White) {
             textColor = 'black';
           } else { // Empty
-            textColor = 'hsl(240, 100%, 30%)'; // Dark blue for labels on empty points for visibility
+            textColor = '#0047AB'; // Кобальтовый синий для лучшей видимости
           }
           
           return (
@@ -258,9 +261,10 @@ const GoBoard: React.FC<GoBoardProps> = ({
                 y={cy}
                 textAnchor="middle"
                 dominantBaseline="central"
-                fontSize={stoneRadius * 0.8} // Adjust size relative to stone
+                fontSize={stoneRadius * 1.0} // Увеличенный размер текста
                 fill={textColor}
                 fontWeight="bold"
+                filter="drop-shadow(0 0 1px rgba(0,0,0,0.3))"
                 className="pointer-events-none select-none"
                 aria-label={`Label "${labelInfo.text}" at column ${String.fromCharCode(65+labelInfo.point.c)}, row ${labelInfo.point.r+1}`}
               >

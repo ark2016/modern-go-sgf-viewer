@@ -434,6 +434,12 @@ const App: React.FC = () => {
             case 'F6': setActiveEditTool(EditTool.ADD_CIRCLE); event.preventDefault(); break;
             case 'F7': setActiveEditTool(EditTool.ADD_MARK_X); event.preventDefault(); break;
             case 'F8': setActiveEditTool(EditTool.ADD_LABEL); event.preventDefault(); break;
+            case 'F9': setActiveEditTool(EditTool.ADD_NUMBER); event.preventDefault(); break;
+            case 'F10': setActiveEditTool(EditTool.ADD_LETTER); event.preventDefault(); break;
+            case 'b': case 'B': setActiveEditTool(EditTool.PLACE_BLACK); event.preventDefault(); break;
+            case 'w': case 'W': setActiveEditTool(EditTool.PLACE_WHITE); event.preventDefault(); break;
+            case 'e': case 'E': case 'Delete': setActiveEditTool(EditTool.REMOVE_STONE); event.preventDefault(); break;
+            case 'Escape': setActiveEditTool(EditTool.EDIT_MODE_SELECT); event.preventDefault(); break;
         }
       }
 
@@ -903,6 +909,77 @@ const App: React.FC = () => {
                     if (lbList.length > 0) newSgfProps['LB'] = lbList;
                     else delete newSgfProps['LB'];
                 }
+                updatedNode = { ...currentSgfNode, sgfProps: newSgfProps };
+                break;
+            }
+            case EditTool.ADD_NUMBER: {
+                // Считаем уже существующие числовые метки, чтобы определить следующий номер
+                let nextNumber = 1;
+                if (newSgfProps['LB']) {
+                    const existingNumbers = newSgfProps['LB']
+                        .map(label => {
+                            const parts = label.split(':');
+                            return parts.length === 2 ? parseInt(parts[1]) : NaN;
+                        })
+                        .filter(num => !isNaN(num));
+                    
+                    if (existingNumbers.length > 0) {
+                        nextNumber = Math.max(...existingNumbers) + 1;
+                    }
+                }
+                
+                // Проверяем, есть ли уже метка в этой точке
+                let lbList = newSgfProps['LB'] ? [...newSgfProps['LB']] : [];
+                const coordPrefix = sgfCoord + ':';
+                lbList = lbList.filter(item => !item.startsWith(coordPrefix)); // Удаляем существующую метку для этой координаты
+                
+                // Добавляем новую числовую метку
+                lbList.push(`${sgfCoord}:${nextNumber}`);
+                
+                if (lbList.length > 0) newSgfProps['LB'] = lbList;
+                else delete newSgfProps['LB'];
+                
+                updatedNode = { ...currentSgfNode, sgfProps: newSgfProps };
+                break;
+            }
+            case EditTool.ADD_LETTER: {
+                // Считаем уже существующие буквенные метки, чтобы определить следующую букву
+                let nextLetterCode = 'A'.charCodeAt(0);
+                if (newSgfProps['LB']) {
+                    const existingLetters = newSgfProps['LB']
+                        .map(label => {
+                            const parts = label.split(':');
+                            // Берем только одиночные буквы A-Z
+                            return parts.length === 2 && parts[1].length === 1 && 
+                                   parts[1] >= 'A' && parts[1] <= 'Z' ? parts[1] : null;
+                        })
+                        .filter(letter => letter !== null);
+                    
+                    if (existingLetters.length > 0) {
+                        // Находим букву с максимальным кодом и берем следующую
+                        const maxLetterCode = Math.max(...existingLetters.map(letter => letter!.charCodeAt(0)));
+                        nextLetterCode = maxLetterCode + 1;
+                        // Если дошли до конца алфавита, начинаем сначала
+                        if (nextLetterCode > 'Z'.charCodeAt(0)) {
+                            nextLetterCode = 'A'.charCodeAt(0);
+                        }
+                    }
+                }
+                
+                // Преобразуем код символа обратно в букву
+                const nextLetter = String.fromCharCode(nextLetterCode);
+                
+                // Проверяем, есть ли уже метка в этой точке
+                let lbList = newSgfProps['LB'] ? [...newSgfProps['LB']] : [];
+                const coordPrefix = sgfCoord + ':';
+                lbList = lbList.filter(item => !item.startsWith(coordPrefix)); // Удаляем существующую метку для этой координаты
+                
+                // Добавляем новую буквенную метку
+                lbList.push(`${sgfCoord}:${nextLetter}`);
+                
+                if (lbList.length > 0) newSgfProps['LB'] = lbList;
+                else delete newSgfProps['LB'];
+                
                 updatedNode = { ...currentSgfNode, sgfProps: newSgfProps };
                 break;
             }

@@ -8,15 +8,17 @@ interface EditToolbarProps {
 
 export const toolDisplayInfo: Record<string, { label: string; icon?: string, hotkey?: string }> = { // Added export
   [EditTool.VIEW_MODE]: { label: "View Mode" }, 
-  [EditTool.EDIT_MODE_SELECT]: { label: "Select", icon: "☝️" },
-  [EditTool.PLACE_BLACK]: { label: "Black", icon: "⚫" },
-  [EditTool.PLACE_WHITE]: { label: "White", icon: "⚪" },
-  [EditTool.REMOVE_STONE]: { label: "Erase All", icon: "❌" },
+  [EditTool.EDIT_MODE_SELECT]: { label: "Select", icon: "☝️", hotkey: "Esc" },
+  [EditTool.PLACE_BLACK]: { label: "Black", icon: "⚫", hotkey: "B" },
+  [EditTool.PLACE_WHITE]: { label: "White", icon: "⚪", hotkey: "W" },
+  [EditTool.REMOVE_STONE]: { label: "Erase All", icon: "❌", hotkey: "E/Del" },
   [EditTool.ADD_TRIANGLE]: { label: "Triangle", icon: "△", hotkey: "F4" },
   [EditTool.ADD_SQUARE]: { label: "Square", icon: "□", hotkey: "F5" },
   [EditTool.ADD_CIRCLE]: { label: "Circle", icon: "○", hotkey: "F6" },
   [EditTool.ADD_MARK_X]: { label: "Mark (X)", icon: "✕", hotkey: "F7" },
   [EditTool.ADD_LABEL]: { label: "Label (A/1)", icon: "Aa", hotkey: "F8" },
+  [EditTool.ADD_NUMBER]: { label: "Numbers", icon: "123", hotkey: "F9" },
+  [EditTool.ADD_LETTER]: { label: "Letters", icon: "ABC", hotkey: "F10" },
 };
 
 
@@ -32,7 +34,7 @@ const EditToolbar: React.FC<EditToolbarProps> = ({ activeTool, onToolSelect }) =
   const tools: EditTool[] = [
     EditTool.PLACE_BLACK, EditTool.PLACE_WHITE, EditTool.REMOVE_STONE,
     EditTool.ADD_TRIANGLE, EditTool.ADD_SQUARE, EditTool.ADD_CIRCLE,
-    EditTool.ADD_MARK_X, EditTool.ADD_LABEL,
+    EditTool.ADD_MARK_X, EditTool.ADD_LABEL, EditTool.ADD_NUMBER, EditTool.ADD_LETTER,
   ];
 
   return (

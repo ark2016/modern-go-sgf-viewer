@@ -1,4 +1,3 @@
-
 export enum StoneColor {
   Black = 'B',
   White = 'W',
@@ -110,4 +109,6 @@ export enum EditTool {
   ADD_CIRCLE = 'ADD_CIRCLE', // F6
   ADD_MARK_X = 'ADD_MARK_X', // F7
   ADD_LABEL = 'ADD_LABEL', // F8
+  ADD_NUMBER = 'ADD_NUMBER', // Числовые метки (1, 2, 3, ...)
+  ADD_LETTER = 'ADD_LETTER', // Буквенные метки (A, B, C, ...)
 }
