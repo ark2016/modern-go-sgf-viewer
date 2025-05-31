@@ -319,6 +319,24 @@ const GoBoard: React.FC<GoBoardProps> = ({
     return distance <= cellSize / 3 && dotProduct >= 0 && dotProduct <= 1;
   };
 
+  // Проверка близости точки к пути для удаления
+  const isPointNearPath = (point: Point, path: DrawingPath): boolean => {
+    // Проверяем расстояние до каждого сегмента пути
+    for (let i = 0; i < path.points.length - 1; i++) {
+      const segment: DrawingLine = {
+        start: path.points[i],
+        end: path.points[i + 1],
+        color: path.color,
+        thickness: path.thickness
+      };
+      
+      if (isPointNearLine(point, segment)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   // Функции для обработки режима свободного рисования
   const handleMouseDown = (e: React.MouseEvent, point: Point) => {
     if (!isDrawingMode) return;
@@ -327,11 +345,15 @@ const GoBoard: React.FC<GoBoardProps> = ({
       // Проверяем, нужно ли удалить линию или стрелку
       let foundLine = lines.find(line => isPointNearLine(point, line));
       let foundArrow = !foundLine ? arrows.find(arrow => isPointNearLine(point, arrow)) : undefined;
+      // Проверяем пути для свободного рисования
+      let foundPath = !foundLine && !foundArrow ? paths.find(path => isPointNearPath(point, path)) : undefined;
       
       if (foundLine && onRemoveDrawing) {
         onRemoveDrawing(foundLine, undefined, undefined);
       } else if (foundArrow && onRemoveDrawing) {
         onRemoveDrawing(undefined, foundArrow, undefined);
+      } else if (foundPath && onRemoveDrawing) {
+        onRemoveDrawing(undefined, undefined, foundPath);
       }
       return;
     }
@@ -355,11 +377,15 @@ const GoBoard: React.FC<GoBoardProps> = ({
       if (e.buttons === 1) {
         let foundLine = lines.find(line => isPointNearLine(point, line));
         let foundArrow = !foundLine ? arrows.find(arrow => isPointNearLine(point, arrow)) : undefined;
+        // Проверяем пути для свободного рисования
+        let foundPath = !foundLine && !foundArrow ? paths.find(path => isPointNearPath(point, path)) : undefined;
         
         if (foundLine && onRemoveDrawing) {
           onRemoveDrawing(foundLine, undefined, undefined);
         } else if (foundArrow && onRemoveDrawing) {
           onRemoveDrawing(undefined, foundArrow, undefined);
+        } else if (foundPath && onRemoveDrawing) {
+          onRemoveDrawing(undefined, undefined, foundPath);
         }
       }
       return;

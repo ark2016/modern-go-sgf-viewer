@@ -44,6 +44,118 @@ const parseSgfLabels = (propValues: string[] | undefined, boardSize: number): La
   }, [] as LabelInfo[]);
 };
 
+// Функция для парсинга линий из SGF
+const parseSgfLinesList = (propValues: string[] | undefined, boardSize: number): DrawingLine[] => {
+  if (!propValues) return [];
+  return propValues.reduce((acc, sgfLine) => {
+    const parts = sgfLine.split(':');
+    if (parts.length === 2) {
+      const startPoint = sgfCoordToPoint(parts[0]);
+      const endPoint = sgfCoordToPoint(parts[1]);
+      if (startPoint && endPoint && 
+          startPoint.r < boardSize && startPoint.c < boardSize && 
+          endPoint.r < boardSize && endPoint.c < boardSize) {
+        
+        // Проверяем, есть ли цвет для этой линии
+        let color = "#FF4500"; // По умолчанию оранжево-красный
+        if (gameData && currentNodeId && gameData.nodes[currentNodeId]?.sgfProps?.['CL']) {
+          const colorEntry = gameData.nodes[currentNodeId].sgfProps['CL'].find(entry => entry.startsWith(sgfLine + ':'));
+          if (colorEntry) {
+            const parts = colorEntry.split(':');
+            if (parts.length > 2) {
+              color = parts[2];
+            }
+          }
+        }
+        
+        acc.push({
+          start: startPoint,
+          end: endPoint,
+          color,
+          thickness: Math.max(2, getCellSize(boardSize) / 12)
+        });
+      }
+    }
+    return acc;
+  }, [] as DrawingLine[]);
+};
+
+// Функция для парсинга стрелок из SGF
+const parseSgfArrowsList = (propValues: string[] | undefined, boardSize: number): DrawingArrow[] => {
+  if (!propValues) return [];
+  return propValues.reduce((acc, sgfArrow) => {
+    const parts = sgfArrow.split(':');
+    if (parts.length === 2) {
+      const startPoint = sgfCoordToPoint(parts[0]);
+      const endPoint = sgfCoordToPoint(parts[1]);
+      if (startPoint && endPoint && 
+          startPoint.r < boardSize && startPoint.c < boardSize && 
+          endPoint.r < boardSize && endPoint.c < boardSize) {
+        
+        // Проверяем, есть ли цвет для этой стрелки
+        let color = "#FF4500"; // По умолчанию оранжево-красный
+        if (gameData && currentNodeId && gameData.nodes[currentNodeId]?.sgfProps?.['CA']) {
+          const colorEntry = gameData.nodes[currentNodeId].sgfProps['CA'].find(entry => entry.startsWith(sgfArrow + ':'));
+          if (colorEntry) {
+            const parts = colorEntry.split(':');
+            if (parts.length > 2) {
+              color = parts[2];
+            }
+          }
+        }
+        
+        acc.push({
+          start: startPoint,
+          end: endPoint,
+          color,
+          thickness: Math.max(2, getCellSize(boardSize) / 12)
+        });
+      }
+    }
+    return acc;
+  }, [] as DrawingArrow[]);
+};
+
+// Функция для парсинга путей из SGF
+const parseSgfPathsList = (propValues: string[] | undefined, boardSize: number): DrawingPath[] => {
+  if (!propValues) return [];
+  return propValues.reduce((acc, sgfPath) => {
+    // Каждые 2 символа - это одна SGF координата
+    const points: Point[] = [];
+    for (let i = 0; i < sgfPath.length; i += 2) {
+      if (i + 1 < sgfPath.length) {
+        const sgfCoord = sgfPath.substring(i, i + 2);
+        const point = sgfCoordToPoint(sgfCoord);
+        if (point && point.r < boardSize && point.c < boardSize) {
+          points.push(point);
+        }
+      }
+    }
+    
+    // Определяем цвет пути
+    let color = "#FF4500"; // По умолчанию оранжево-красный
+    if (gameData && currentNodeId && gameData.nodes[currentNodeId]?.sgfProps?.['ZC']) {
+      const pathStart = sgfPath.substring(0, 4); // Берем первые две координаты как идентификатор
+      const colorEntry = gameData.nodes[currentNodeId].sgfProps['ZC'].find(entry => entry.startsWith(pathStart + ':'));
+      if (colorEntry) {
+        const parts = colorEntry.split(':');
+        if (parts.length === 2) {
+          color = parts[1];
+        }
+      }
+    }
+    
+    if (points.length >= 2) {
+      acc.push({
+        points,
+        color,
+        thickness: Math.max(2, getCellSize(boardSize) / 12)
+      });
+    }
+    
+    return acc;
+  }, [] as DrawingPath[]);
+};
 
 const App: React.FC = () => {
   const [gameData, setGameData] = useState<FullGameData | null>(null);
@@ -87,6 +199,8 @@ const App: React.FC = () => {
   const [currentDrawingType, setCurrentDrawingType] = useState<DrawingMode>(DrawingMode.NONE);
   const [temporaryDrawing, setTemporaryDrawing] = useState<DrawingLine | DrawingArrow | null>(null);
   const [currentFreehandPath, setCurrentFreehandPath] = useState<Point[]>([]);
+  // Добавляем состояние для цвета рисования
+  const [currentDrawingColor, setCurrentDrawingColor] = useState<string>("#FF4500"); // Оранжево-красный по умолчанию
 
   const updateStateFromNodeId = useCallback((nodeId: string | null, newGameData?: FullGameData | null) => { 
     const dataToUse = newGameData === undefined ? gameData : newGameData; 
@@ -1158,18 +1272,54 @@ const App: React.FC = () => {
       setTemporaryDrawing({
         start: point,
         end: point,
-        color: "#FF4500", // Оранжево-красный цвет по умолчанию
+        color: currentDrawingColor, // Используем выбранный цвет
         thickness: Math.max(2, getCellSize(boardSize) / 12)
       } as DrawingLine);
     } else if (currentDrawingType === DrawingMode.ARROW) {
       setTemporaryDrawing({
         start: point,
         end: point,
-        color: "#FF4500", // Оранжево-красный цвет по умолчанию
+        color: currentDrawingColor, // Используем выбранный цвет
         thickness: Math.max(2, getCellSize(boardSize) / 12)
       } as DrawingArrow);
     } else if (currentDrawingType === DrawingMode.FREEHAND) {
       setCurrentFreehandPath([point]);
+    } else if (currentDrawingType === DrawingMode.ERASER) {
+      // Проверяем, нужно ли удалить линию или стрелку
+      let foundLine = currentLines.find(line => isPointNearLine(point, line));
+      let foundArrow = !foundLine ? currentArrows.find(arrow => isPointNearLine(point, arrow)) : undefined;
+      
+      // Проверяем, нужно ли удалить путь свободного рисования
+      let foundPath: DrawingPath | undefined = undefined;
+      if (!foundLine && !foundArrow) {
+        // Находим ближайший путь свободного рисования
+        for (const path of currentPaths) {
+          // Проверяем каждый сегмент пути
+          for (let i = 0; i < path.points.length - 1; i++) {
+            const lineSegment: DrawingLine = {
+              start: path.points[i],
+              end: path.points[i + 1],
+              color: path.color,
+              thickness: path.thickness
+            };
+            
+            if (isPointNearLine(point, lineSegment)) {
+              foundPath = path;
+              break;
+            }
+          }
+          
+          if (foundPath) break;
+        }
+      }
+      
+      if (foundLine && onRemoveDrawing) {
+        onRemoveDrawing(foundLine, undefined, undefined);
+      } else if (foundArrow && onRemoveDrawing) {
+        onRemoveDrawing(undefined, foundArrow, undefined);
+      } else if (foundPath && onRemoveDrawing) {
+        onRemoveDrawing(undefined, undefined, foundPath);
+      }
     }
   };
 
@@ -1192,117 +1342,49 @@ const App: React.FC = () => {
           currentFreehandPath[currentFreehandPath.length - 1].c !== point.c) {
         setCurrentFreehandPath(prev => [...prev, point]);
       }
-    }
-  };
-
-  const handleDrawEnd = (point: Point) => {
-    if (!drawingStartPoint) return;
-    
-    setDrawingEndPoint(point);
-    
-    // Если начальная и конечная точки совпадают при рисовании линии или стрелки, не добавляем
-    if ((currentDrawingType === DrawingMode.LINE || currentDrawingType === DrawingMode.ARROW) && 
-        drawingStartPoint.r === point.r && drawingStartPoint.c === point.c) {
-      setDrawingStartPoint(null);
-      setDrawingEndPoint(null);
-      setTemporaryDrawing(null);
-      return;
-    }
-    
-    // Добавляем рисование в соответствующий массив
-    if (currentDrawingType === DrawingMode.LINE) {
-      const newLine: DrawingLine = {
-        start: drawingStartPoint,
-        end: point,
-        color: "#FF4500", // Оранжево-красный цвет по умолчанию
-        thickness: Math.max(2, getCellSize(boardSize) / 12)
-      };
-      setCurrentLines([...currentLines, newLine]);
-      
-      // Сохраняем линию в SGF метаданных текущего узла
-      if (gameData && currentNodeId) {
-        const updatedGameData = { ...gameData };
-        const updatedNode = { ...updatedGameData.nodes[currentNodeId] };
-        const updatedSgfProps = { ...updatedNode.sgfProps };
+    } else if (currentDrawingType === DrawingMode.ERASER) {
+      // При движении с зажатой кнопкой мыши проверяем удаление
+      if (document.querySelectorAll('button:active').length > 0) {
+        // Проверяем, нужно ли удалить линию или стрелку
+        let foundLine = currentLines.find(line => isPointNearLine(point, line));
+        let foundArrow = !foundLine ? currentArrows.find(arrow => isPointNearLine(point, arrow)) : undefined;
         
-        // SGF LN[point1:point2] формат для линий
-        const sgfStartCoord = utilPointToSgfCoord(drawingStartPoint);
-        const sgfEndCoord = utilPointToSgfCoord(point);
-        const lnValue = `${sgfStartCoord}:${sgfEndCoord}`;
-        
-        if (!updatedSgfProps['LN']) updatedSgfProps['LN'] = [];
-        updatedSgfProps['LN'].push(lnValue);
-        
-        updatedNode.sgfProps = updatedSgfProps;
-        updatedGameData.nodes[currentNodeId] = updatedNode;
-        setGameData(updatedGameData);
-      }
-    } else if (currentDrawingType === DrawingMode.ARROW) {
-      const newArrow: DrawingArrow = {
-        start: drawingStartPoint,
-        end: point,
-        color: "#FF4500", // Оранжево-красный цвет по умолчанию
-        thickness: Math.max(2, getCellSize(boardSize) / 12)
-      };
-      setCurrentArrows([...currentArrows, newArrow]);
-      
-      // Сохраняем стрелку в SGF метаданных текущего узла
-      if (gameData && currentNodeId) {
-        const updatedGameData = { ...gameData };
-        const updatedNode = { ...updatedGameData.nodes[currentNodeId] };
-        const updatedSgfProps = { ...updatedNode.sgfProps };
-        
-        // SGF AR[point1:point2] формат для стрелок
-        const sgfStartCoord = utilPointToSgfCoord(drawingStartPoint);
-        const sgfEndCoord = utilPointToSgfCoord(point);
-        const arValue = `${sgfStartCoord}:${sgfEndCoord}`;
-        
-        if (!updatedSgfProps['AR']) updatedSgfProps['AR'] = [];
-        updatedSgfProps['AR'].push(arValue);
-        
-        updatedNode.sgfProps = updatedSgfProps;
-        updatedGameData.nodes[currentNodeId] = updatedNode;
-        setGameData(updatedGameData);
-      }
-    } else if (currentDrawingType === DrawingMode.FREEHAND && currentFreehandPath.length > 1) {
-      // Добавляем путь для свободного рисования
-      const newPath: DrawingPath = {
-        points: [...currentFreehandPath, point],
-        color: "#FF4500", // Оранжево-красный цвет по умолчанию
-        thickness: Math.max(2, getCellSize(boardSize) / 12)
-      };
-      setCurrentPaths([...currentPaths, newPath]);
-      
-      // Сохраняем путь в SGF метаданных текущего узла (используем кастомное свойство ZZ)
-      if (gameData && currentNodeId) {
-        const updatedGameData = { ...gameData };
-        const updatedNode = { ...updatedGameData.nodes[currentNodeId] };
-        const updatedSgfProps = { ...updatedNode.sgfProps };
-        
-        // Создаем строковое представление пути
-        let pathCoords = "";
-        for (const pathPoint of [...currentFreehandPath, point]) {
-          const sgfCoord = utilPointToSgfCoord(pathPoint);
-          pathCoords += sgfCoord;
+        // Проверяем, нужно ли удалить путь свободного рисования
+        let foundPath: DrawingPath | undefined = undefined;
+        if (!foundLine && !foundArrow) {
+          // Находим ближайший путь свободного рисования
+          for (const path of currentPaths) {
+            // Проверяем каждый сегмент пути
+            for (let i = 0; i < path.points.length - 1; i++) {
+              const lineSegment: DrawingLine = {
+                start: path.points[i],
+                end: path.points[i + 1],
+                color: path.color,
+                thickness: path.thickness
+              };
+              
+              if (isPointNearLine(point, lineSegment)) {
+                foundPath = path;
+                break;
+              }
+            }
+            
+            if (foundPath) break;
+          }
         }
         
-        if (!updatedSgfProps['ZZ']) updatedSgfProps['ZZ'] = [];
-        updatedSgfProps['ZZ'].push(pathCoords);
-        
-        updatedNode.sgfProps = updatedSgfProps;
-        updatedGameData.nodes[currentNodeId] = updatedNode;
-        setGameData(updatedGameData);
+        if (foundLine && onRemoveDrawing) {
+          onRemoveDrawing(foundLine, undefined, undefined);
+        } else if (foundArrow && onRemoveDrawing) {
+          onRemoveDrawing(undefined, foundArrow, undefined);
+        } else if (foundPath && onRemoveDrawing) {
+          onRemoveDrawing(undefined, undefined, foundPath);
+        }
       }
     }
-    
-    // Сбрасываем состояние рисования
-    setDrawingStartPoint(null);
-    setDrawingEndPoint(null);
-    setTemporaryDrawing(null);
-    setCurrentFreehandPath([]);
   };
 
-  // Функция для удаления линии, стрелки или пути
+  // Добавляем или обновляем функцию handleRemoveDrawing
   const handleRemoveDrawing = (line?: DrawingLine, arrow?: DrawingArrow, path?: DrawingPath) => {
     if (!gameData || !currentNodeId) return;
 
@@ -1372,82 +1454,212 @@ const App: React.FC = () => {
       }
     }
     
-    // Если передан путь для удаления (не реализовано полностью, т.к. сложно определить точное соответствие)
-    // Эту часть можно реализовать позже, если нужно
-  };
-
-  // Функция для парсинга линий из SGF
-  const parseSgfLinesList = (propValues: string[] | undefined, boardSize: number): DrawingLine[] => {
-    if (!propValues) return [];
-    return propValues.reduce((acc, sgfLine) => {
-      const parts = sgfLine.split(':');
-      if (parts.length === 2) {
-        const startPoint = sgfCoordToPoint(parts[0]);
-        const endPoint = sgfCoordToPoint(parts[1]);
-        if (startPoint && endPoint && 
-            startPoint.r < boardSize && startPoint.c < boardSize && 
-            endPoint.r < boardSize && endPoint.c < boardSize) {
-          acc.push({
-            start: startPoint,
-            end: endPoint,
-            color: "#FF4500", // Оранжево-красный цвет по умолчанию
-            thickness: Math.max(2, getCellSize(boardSize) / 12)
-          });
-        }
-      }
-      return acc;
-    }, [] as DrawingLine[]);
-  };
-
-  // Функция для парсинга стрелок из SGF
-  const parseSgfArrowsList = (propValues: string[] | undefined, boardSize: number): DrawingArrow[] => {
-    if (!propValues) return [];
-    return propValues.reduce((acc, sgfArrow) => {
-      const parts = sgfArrow.split(':');
-      if (parts.length === 2) {
-        const startPoint = sgfCoordToPoint(parts[0]);
-        const endPoint = sgfCoordToPoint(parts[1]);
-        if (startPoint && endPoint && 
-            startPoint.r < boardSize && startPoint.c < boardSize && 
-            endPoint.r < boardSize && endPoint.c < boardSize) {
-          acc.push({
-            start: startPoint,
-            end: endPoint,
-            color: "#FF4500", // Оранжево-красный цвет по умолчанию
-            thickness: Math.max(2, getCellSize(boardSize) / 12)
-          });
-        }
-      }
-      return acc;
-    }, [] as DrawingArrow[]);
-  };
-  
-  // Функция для парсинга путей из SGF
-  const parseSgfPathsList = (propValues: string[] | undefined, boardSize: number): DrawingPath[] => {
-    if (!propValues) return [];
-    return propValues.reduce((acc, sgfPath) => {
-      // Каждые 2 символа - это одна SGF координата
-      const points: Point[] = [];
-      for (let i = 0; i < sgfPath.length; i += 2) {
-        if (i + 1 < sgfPath.length) {
-          const sgfCoord = sgfPath.substring(i, i + 2);
-          const point = sgfCoordToPoint(sgfCoord);
-          if (point && point.r < boardSize && point.c < boardSize) {
-            points.push(point);
+    // Если передан путь для удаления
+    else if (path) {
+      // Находим путь в массиве текущих путей
+      const pathIndex = currentPaths.findIndex(p => 
+        // Простая проверка - если количество точек совпадает и первая/последняя точки совпадают
+        p.points.length === path.points.length && 
+        p.points[0].r === path.points[0].r && 
+        p.points[0].c === path.points[0].c &&
+        p.points[p.points.length - 1].r === path.points[path.points.length - 1].r && 
+        p.points[p.points.length - 1].c === path.points[path.points.length - 1].c
+      );
+      
+      if (pathIndex !== -1) {
+        // Удаляем путь из массива
+        const updatedPaths = [...currentPaths];
+        updatedPaths.splice(pathIndex, 1);
+        setCurrentPaths(updatedPaths);
+        
+        // Удаляем соответствующее SGF свойство
+        if (gameData && currentNodeId) {
+          const updatedGameData = { ...gameData };
+          const updatedNode = { ...updatedGameData.nodes[currentNodeId] };
+          const updatedSgfProps = { ...updatedNode.sgfProps };
+          
+          // Создаем строковое представление пути для поиска в SGF
+          // Для упрощения ищем просто по первым координатам
+          if (updatedSgfProps['ZZ']) {
+            const pathStart = utilPointToSgfCoord(path.points[0]) + utilPointToSgfCoord(path.points[1]);
+            const pathIndex = updatedSgfProps['ZZ'].findIndex(zz => zz.startsWith(pathStart));
+            
+            if (pathIndex !== -1) {
+              updatedSgfProps['ZZ'].splice(pathIndex, 1);
+              if (updatedSgfProps['ZZ'].length === 0) {
+                delete updatedSgfProps['ZZ'];
+              }
+            }
           }
+          
+          updatedNode.sgfProps = updatedSgfProps;
+          updatedGameData.nodes[currentNodeId] = updatedNode;
+          setGameData(updatedGameData);
         }
       }
+    }
+  };
+
+  // Обработчик изменения цвета
+  const handleColorChange = (color: string) => {
+    setCurrentDrawingColor(color);
+  };
+
+  // Компонент выбора цвета в интерфейсе
+  {isEditMode && (
+    <>
+      <EditToolbar 
+        activeTool={activeEditTool} 
+        onToolSelect={setActiveEditTool} 
+      />
+      {/* Панель выбора цвета */}
+      {(activeEditTool === EditTool.DRAW_LINE || 
+        activeEditTool === EditTool.DRAW_ARROW || 
+        activeEditTool === EditTool.DRAW_FREEHAND) && (
+        <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow space-y-3">
+          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200 border-b pb-2 mb-2 dark:border-gray-700">
+            Цвет рисования
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {["#FF4500", "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF", "#000000", "#FFFFFF"].map(color => (
+              <button
+                key={color}
+                onClick={() => handleColorChange(color)}
+                className={`w-8 h-8 rounded-full border ${currentDrawingColor === color ? 'border-4 border-gray-500' : 'border border-gray-300'}`}
+                style={{ backgroundColor: color }}
+                aria-label={`Выбрать цвет ${color}`}
+                title={color}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  )}
+
+  const handleDrawEnd = (point: Point) => {
+    if (!drawingStartPoint) return;
+    
+    setDrawingEndPoint(point);
+    
+    // Если начальная и конечная точки совпадают при рисовании линии или стрелки, не добавляем
+    if ((currentDrawingType === DrawingMode.LINE || currentDrawingType === DrawingMode.ARROW) && 
+        drawingStartPoint.r === point.r && drawingStartPoint.c === point.c) {
+      setDrawingStartPoint(null);
+      setDrawingEndPoint(null);
+      setTemporaryDrawing(null);
+      return;
+    }
+    
+    // Добавляем рисование в соответствующий массив
+    if (currentDrawingType === DrawingMode.LINE) {
+      const newLine: DrawingLine = {
+        start: drawingStartPoint,
+        end: point,
+        color: currentDrawingColor, // Используем выбранный цвет
+        thickness: Math.max(2, getCellSize(boardSize) / 12)
+      };
+      setCurrentLines([...currentLines, newLine]);
       
-      if (points.length >= 2) {
-        acc.push({
-          points,
-          color: "#FF4500", // Оранжево-красный цвет по умолчанию
-          thickness: Math.max(2, getCellSize(boardSize) / 12)
-        });
+      // Сохраняем линию в SGF метаданных текущего узла
+      if (gameData && currentNodeId) {
+        const updatedGameData = { ...gameData };
+        const updatedNode = { ...updatedGameData.nodes[currentNodeId] };
+        const updatedSgfProps = { ...updatedNode.sgfProps };
+        
+        // SGF LN[point1:point2] формат для линий
+        const sgfStartCoord = utilPointToSgfCoord(drawingStartPoint);
+        const sgfEndCoord = utilPointToSgfCoord(point);
+        const lnValue = `${sgfStartCoord}:${sgfEndCoord}`;
+        
+        if (!updatedSgfProps['LN']) updatedSgfProps['LN'] = [];
+        updatedSgfProps['LN'].push(lnValue);
+        
+        // Сохраняем цвет в кастомном свойстве, если он отличается от стандартного
+        if (currentDrawingColor !== "#FF4500") {
+          if (!updatedSgfProps['CL']) updatedSgfProps['CL'] = [];
+          updatedSgfProps['CL'].push(`${lnValue}:${currentDrawingColor}`);
+        }
+        
+        updatedNode.sgfProps = updatedSgfProps;
+        updatedGameData.nodes[currentNodeId] = updatedNode;
+        setGameData(updatedGameData);
       }
+    } else if (currentDrawingType === DrawingMode.ARROW) {
+      const newArrow: DrawingArrow = {
+        start: drawingStartPoint,
+        end: point,
+        color: currentDrawingColor, // Используем выбранный цвет
+        thickness: Math.max(2, getCellSize(boardSize) / 12)
+      };
+      setCurrentArrows([...currentArrows, newArrow]);
       
-      return acc;
-    }, [] as DrawingPath[]);
+      // Сохраняем стрелку в SGF метаданных текущего узла
+      if (gameData && currentNodeId) {
+        const updatedGameData = { ...gameData };
+        const updatedNode = { ...updatedGameData.nodes[currentNodeId] };
+        const updatedSgfProps = { ...updatedNode.sgfProps };
+        
+        // SGF AR[point1:point2] формат для стрелок
+        const sgfStartCoord = utilPointToSgfCoord(drawingStartPoint);
+        const sgfEndCoord = utilPointToSgfCoord(point);
+        const arValue = `${sgfStartCoord}:${sgfEndCoord}`;
+        
+        if (!updatedSgfProps['AR']) updatedSgfProps['AR'] = [];
+        updatedSgfProps['AR'].push(arValue);
+        
+        // Сохраняем цвет в кастомном свойстве, если он отличается от стандартного
+        if (currentDrawingColor !== "#FF4500") {
+          if (!updatedSgfProps['CA']) updatedSgfProps['CA'] = [];
+          updatedSgfProps['CA'].push(`${arValue}:${currentDrawingColor}`);
+        }
+        
+        updatedNode.sgfProps = updatedSgfProps;
+        updatedGameData.nodes[currentNodeId] = updatedNode;
+        setGameData(updatedGameData);
+      }
+    } else if (currentDrawingType === DrawingMode.FREEHAND && currentFreehandPath.length > 1) {
+      // Добавляем путь для свободного рисования
+      const newPath: DrawingPath = {
+        points: [...currentFreehandPath, point],
+        color: currentDrawingColor, // Используем выбранный цвет
+        thickness: Math.max(2, getCellSize(boardSize) / 12)
+      };
+      setCurrentPaths([...currentPaths, newPath]);
+      
+      // Сохраняем путь в SGF метаданных текущего узла (используем кастомное свойство ZZ)
+      if (gameData && currentNodeId) {
+        const updatedGameData = { ...gameData };
+        const updatedNode = { ...updatedGameData.nodes[currentNodeId] };
+        const updatedSgfProps = { ...updatedNode.sgfProps };
+        
+        // Создаем строковое представление пути
+        let pathCoords = "";
+        for (const pathPoint of [...currentFreehandPath, point]) {
+          const sgfCoord = utilPointToSgfCoord(pathPoint);
+          pathCoords += sgfCoord;
+        }
+        
+        if (!updatedSgfProps['ZZ']) updatedSgfProps['ZZ'] = [];
+        updatedSgfProps['ZZ'].push(pathCoords);
+        
+        // Сохраняем цвет в кастомном свойстве, если он отличается от стандартного
+        if (currentDrawingColor !== "#FF4500") {
+          if (!updatedSgfProps['ZC']) updatedSgfProps['ZC'] = [];
+          updatedSgfProps['ZC'].push(`${pathCoords.substring(0, 4)}:${currentDrawingColor}`);
+        }
+        
+        updatedNode.sgfProps = updatedSgfProps;
+        updatedGameData.nodes[currentNodeId] = updatedNode;
+        setGameData(updatedGameData);
+      }
+    }
+    
+    // Сбрасываем состояние рисования
+    setDrawingStartPoint(null);
+    setDrawingEndPoint(null);
+    setTemporaryDrawing(null);
+    setCurrentFreehandPath([]);
   };
 
   return (
@@ -1470,10 +1682,34 @@ const App: React.FC = () => {
             canDownload={!!gameData}
           />
           {isEditMode && (
-            <EditToolbar 
-              activeTool={activeEditTool} 
-              onToolSelect={setActiveEditTool} 
-            />
+            <>
+              <EditToolbar 
+                activeTool={activeEditTool} 
+                onToolSelect={setActiveEditTool} 
+              />
+              {/* Панель выбора цвета */}
+              {(activeEditTool === EditTool.DRAW_LINE || 
+                activeEditTool === EditTool.DRAW_ARROW || 
+                activeEditTool === EditTool.DRAW_FREEHAND) && (
+                <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow space-y-3">
+                  <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200 border-b pb-2 mb-2 dark:border-gray-700">
+                    Цвет рисования
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {["#FF4500", "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF", "#000000", "#FFFFFF"].map(color => (
+                      <button
+                        key={color}
+                        onClick={() => handleColorChange(color)}
+                        className={`w-8 h-8 rounded-full border ${currentDrawingColor === color ? 'border-4 border-gray-500' : 'border border-gray-300'}`}
+                        style={{ backgroundColor: color }}
+                        aria-label={`Выбрать цвет ${color}`}
+                        title={color}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
           <GameInfo 
             info={gameData?.info || (isEditMode ? { boardSize: DEFAULT_BOARD_SIZE, name: "New Game"} as SgfGameInfo : null)}
@@ -1523,7 +1759,10 @@ const App: React.FC = () => {
               />
            </div>
            {isEditMode && activeEditTool && toolDisplayInfo[activeEditTool] &&
-             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Active Tool: {toolDisplayInfo[activeEditTool]?.label || 'Select'}. Click to interact.</p>
+             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+               Активный инструмент: {toolDisplayInfo[activeEditTool]?.label || 'Select'}. 
+               {activeEditTool === EditTool.REMOVE_DRAWING ? " Кликните по линии, стрелке или рисунку, чтобы удалить." : ""}
+             </p>
            }
            {!isEditMode && gameData?.info.name === "New Game" &&
              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Click on the board to play a move.</p>
