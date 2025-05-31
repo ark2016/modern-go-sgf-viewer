@@ -9,6 +9,21 @@ export interface Point {
   c: number; // col
 }
 
+// Новые типы для рисования линий и стрелок
+export interface DrawingLine {
+  start: Point;
+  end: Point;
+  color?: string;
+  thickness?: number;
+}
+
+export interface DrawingArrow {
+  start: Point;
+  end: Point;
+  color?: string;
+  thickness?: number;
+}
+
 export interface SgfGameInfo {
   name?: string;
   playerBlack?: string;
@@ -111,4 +126,26 @@ export enum EditTool {
   ADD_LABEL = 'ADD_LABEL', // F8
   ADD_NUMBER = 'ADD_NUMBER', // Числовые метки (1, 2, 3, ...)
   ADD_LETTER = 'ADD_LETTER', // Буквенные метки (A, B, C, ...)
+  // Инструменты для рисования
+  DRAWING_MODE = 'DRAWING_MODE', // Режим рисования
+  DRAW_LINE = 'DRAW_LINE', // Рисование линии
+  DRAW_ARROW = 'DRAW_ARROW', // Рисование стрелки
+  REMOVE_DRAWING = 'REMOVE_DRAWING', // Удаление линий и стрелок
+  DRAW_FREEHAND = 'DRAW_FREEHAND', // Свободное рисование
+}
+
+// Режим рисования
+export enum DrawingMode {
+  NONE = 'NONE',
+  LINE = 'LINE',
+  ARROW = 'ARROW',
+  FREEHAND = 'FREEHAND', // Добавляем режим свободного рисования
+  ERASER = 'ERASER', // Режим стирания
+}
+
+// Для свободного рисования добавляем тип для хранения путей
+export interface DrawingPath {
+  points: Point[];
+  color?: string;
+  thickness?: number;
 }

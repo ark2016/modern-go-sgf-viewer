@@ -19,6 +19,11 @@ export const toolDisplayInfo: Record<string, { label: string; icon?: string, hot
   [EditTool.ADD_LABEL]: { label: "Label (A/1)", icon: "Aa", hotkey: "F8" },
   [EditTool.ADD_NUMBER]: { label: "Numbers", icon: "123", hotkey: "F9" },
   [EditTool.ADD_LETTER]: { label: "Letters", icon: "ABC", hotkey: "F10" },
+  [EditTool.DRAWING_MODE]: { label: "Drawing", icon: "🖌️", hotkey: "D" },
+  [EditTool.DRAW_LINE]: { label: "Line", icon: "━", hotkey: "L" },
+  [EditTool.DRAW_ARROW]: { label: "Arrow", icon: "→", hotkey: "A" },
+  [EditTool.REMOVE_DRAWING]: { label: "Erase Drawings", icon: "🧽", hotkey: "X" },
+  [EditTool.DRAW_FREEHAND]: { label: "Freehand", icon: "✎", hotkey: "F" },
 };
 
 
@@ -35,6 +40,7 @@ const EditToolbar: React.FC<EditToolbarProps> = ({ activeTool, onToolSelect }) =
     EditTool.PLACE_BLACK, EditTool.PLACE_WHITE, EditTool.REMOVE_STONE,
     EditTool.ADD_TRIANGLE, EditTool.ADD_SQUARE, EditTool.ADD_CIRCLE,
     EditTool.ADD_MARK_X, EditTool.ADD_LABEL, EditTool.ADD_NUMBER, EditTool.ADD_LETTER,
+    EditTool.DRAW_LINE, EditTool.DRAW_ARROW, EditTool.DRAW_FREEHAND, EditTool.REMOVE_DRAWING,
   ];
 
   return (
