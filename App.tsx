@@ -1758,7 +1758,65 @@ const App: React.FC = () => {
                 onRemoveDrawing={handleRemoveDrawing}
               />
            </div>
-           {isEditMode && activeEditTool && toolDisplayInfo[activeEditTool] &&
+           
+           {/* Выбор цвета под доской */}
+           {isEditMode && (activeEditTool === EditTool.DRAW_LINE || 
+              activeEditTool === EditTool.DRAW_ARROW || 
+              activeEditTool === EditTool.DRAW_FREEHAND || 
+              activeEditTool === EditTool.REMOVE_DRAWING) && (
+              <div className="mt-4 bg-white dark:bg-gray-800 p-3 rounded-lg shadow-md w-full">
+                {/* Отображаем информацию о текущем инструменте */}
+                <div className="mb-2 text-center">
+                  <span className="font-semibold text-gray-700 dark:text-gray-300">
+                    {toolDisplayInfo[activeEditTool]?.label || 'Рисование'} 
+                    {activeEditTool === EditTool.DRAW_LINE && " - протяните линию между точками"}
+                    {activeEditTool === EditTool.DRAW_ARROW && " - протяните стрелку между точками"}
+                    {activeEditTool === EditTool.DRAW_FREEHAND && " - рисуйте свободно, как в Paint"}
+                    {activeEditTool === EditTool.REMOVE_DRAWING && " - кликните по рисунку для удаления"}
+                  </span>
+                  {activeEditTool !== EditTool.REMOVE_DRAWING && (
+                    <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                      (клавиша {
+                        activeEditTool === EditTool.DRAW_LINE ? 'L' : 
+                        activeEditTool === EditTool.DRAW_ARROW ? 'A' : 
+                        activeEditTool === EditTool.DRAW_FREEHAND ? 'F' : ''
+                      })
+                    </span>
+                  )}
+                </div>
+                
+                {/* Палитра цветов */}
+                {activeEditTool !== EditTool.REMOVE_DRAWING && (
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <span className="text-sm text-gray-600 dark:text-gray-400 mr-2 self-center">Цвет:</span>
+                    {/* Основные цвета */}
+                    {["#FF4500", "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF"].map(color => (
+                      <button
+                        key={color}
+                        onClick={() => handleColorChange(color)}
+                        className={`w-8 h-8 rounded-full border-2 ${currentDrawingColor === color ? 'border-4 border-gray-500 scale-110' : 'border border-gray-300'}`}
+                        style={{ backgroundColor: color }}
+                        aria-label={`Выбрать цвет ${color}`}
+                        title={color}
+                      />
+                    ))}
+                    {/* Дополнительные цвета */}
+                    {["#FFA500", "#800080", "#008000", "#000080", "#A52A2A", "#000000", "#FFFFFF"].map(color => (
+                      <button
+                        key={color}
+                        onClick={() => handleColorChange(color)}
+                        className={`w-8 h-8 rounded-full border-2 ${currentDrawingColor === color ? 'border-4 border-gray-500 scale-110' : 'border border-gray-300'}`}
+                        style={{ backgroundColor: color }}
+                        aria-label={`Выбрать цвет ${color}`}
+                        title={color}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+           
+           {isEditMode && activeEditTool && toolDisplayInfo[activeEditTool] && !["DRAW_LINE", "DRAW_ARROW", "DRAW_FREEHAND", "REMOVE_DRAWING"].includes(activeEditTool) &&
              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                Активный инструмент: {toolDisplayInfo[activeEditTool]?.label || 'Select'}. 
                {activeEditTool === EditTool.REMOVE_DRAWING ? " Кликните по линии, стрелке или рисунку, чтобы удалить." : ""}
