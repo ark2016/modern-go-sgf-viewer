@@ -1,4 +1,3 @@
-
 import React, { useRef } from 'react';
 
 interface ControlsProps {
@@ -114,6 +113,10 @@ const Controls: React.FC<ControlsProps> = ({
             className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-blue-500"
             aria-label="Move navigation slider"
           />
+          <p className="text-xs text-gray-600 dark:text-gray-400 text-center mt-1">
+            Используйте клавиши ← → для перехода к предыдущему/следующему ходу,<br />
+            ↑ ↓ для перехода к первому/последнему ходу
+          </p>
         </div>
       )}
     </div>

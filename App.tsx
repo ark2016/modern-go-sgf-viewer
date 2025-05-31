@@ -558,6 +558,25 @@ const App: React.FC = () => {
         return; 
       }
       
+      // Обработка навигации по ходам с помощью стрелок (всегда работает)
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        handleNavigation('prev');
+        return;
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        handleNavigation('next');
+        return;
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        handleNavigation('first');
+        return;
+      } else if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        handleNavigation('last');
+        return;
+      }
+      
       if (isEditMode) {
         switch(event.key) {
             case 'F4': setActiveEditTool(EditTool.ADD_TRIANGLE); event.preventDefault(); break;
@@ -575,16 +594,6 @@ const App: React.FC = () => {
             case 'l': case 'L': setActiveEditTool(EditTool.DRAW_LINE); event.preventDefault(); break;
             case 'a': case 'A': setActiveEditTool(EditTool.DRAW_ARROW); event.preventDefault(); break;
             case 'x': case 'X': setActiveEditTool(EditTool.REMOVE_DRAWING); event.preventDefault(); break;
-        }
-      }
-
-      if (!isEditMode || activeEditTool === EditTool.EDIT_MODE_SELECT || !activeEditTool) {
-        if (event.key === 'ArrowLeft') {
-          event.preventDefault();
-          handleNavigation('prev');
-        } else if (event.key === 'ArrowRight') {
-          event.preventDefault();
-          handleNavigation('next');
         }
       }
     };
