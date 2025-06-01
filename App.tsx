@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import GoBoard from './components/GoBoard';
 import Controls from './components/Controls';
 import GameInfo from './components/GameInfo';
@@ -165,6 +165,44 @@ const parseSgfPathsList = (propValues: string[] | undefined, boardSize: number):
   }, [] as DrawingPath[]);
 };
 
+// Функция для определения, используется ли мобильное устройство
+const useMobileDetect = () => {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      const width = window.innerWidth;
+      setIsMobile(width < 768); // 768px - стандартная точка для мобильных устройств
+    };
+    
+    checkMobile(); // Проверка при загрузке
+    window.addEventListener('resize', checkMobile);
+    
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+    };
+  }, []);
+  
+  return isMobile;
+};
+
+const getCellSize = (bs: number, isMobile: boolean) => {
+  // Для мобильных устройств - динамический расчет размера ячейки
+  if (isMobile) {
+    // Вернем примерные размеры, точный размер будет установлен динамически
+    if (bs <= 9) return 28;
+    if (bs <= 13) return 22;
+    if (bs <= 19) return 16;
+    return 14;
+  } else {
+    // Оригинальные размеры для десктопов
+    if (bs <= 9) return 38;
+    if (bs <= 13) return 32;
+    if (bs <= 19) return 28;
+    return 24; 
+  }
+};
+
 const App: React.FC = () => {
   const [gameData, setGameData] = useState<FullGameData | null>(null);
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
@@ -214,6 +252,10 @@ const App: React.FC = () => {
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState<boolean>(false);
   const [emojiPickerPosition, setEmojiPickerPosition] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
   const [currentEmojiPoint, setCurrentEmojiPoint] = useState<Point | null>(null);
+
+  const isMobile = useMobileDetect();
+  const boardContainerRef = useRef<HTMLDivElement>(null);
+  const [mobileCellSize, setMobileCellSize] = useState<number | null>(null);
 
   const updateStateFromNodeId = useCallback((nodeId: string | null, newGameData?: FullGameData | null) => { 
     const dataToUse = newGameData === undefined ? gameData : newGameData; 
@@ -1057,7 +1099,7 @@ const App: React.FC = () => {
                 if (boardElement) {
                     const rect = boardElement.getBoundingClientRect();
                     // Для каждой точки находим ее координаты на экране
-                    const cellSize = getCellSize(boardSize);
+                    const cellSize = getCellSize(boardSize, isMobile);
                     const padding = cellSize / 2;
                     const pointX = rect.left + padding + point.c * cellSize;
                     const pointY = rect.top + padding + point.r * cellSize;
@@ -1237,33 +1279,6 @@ const App: React.FC = () => {
   const currentSgfNodeForInfo = gameData && currentNodeId ? gameData.nodes[currentNodeId] : null;
   const currentMoveIndexForSlider = currentSgfNodeForInfo ? (currentSgfNodeForInfo.moveNumber > 0 ? currentSgfNodeForInfo.moveNumber -1 : -1) : -1;
 
-  const getCellSize = (bs: number) => {
-    if (bs <= 9) return 38;
-    if (bs <= 13) return 32;
-    if (bs <= 19) return 28;
-    return 24; 
-  };
-  
-  let totalMovesForControls = maxMainLineMoveNumber;
-  if (isEditMode && (!sgfFileName || gameData?.info?.name === "New Game")) {
-    if (currentSgfNodeForInfo && currentSgfNodeForInfo.moveNumber > totalMovesForControls) {
-        totalMovesForControls = currentSgfNodeForInfo.moveNumber;
-    }
-    if (totalMovesForControls === 0 && currentSgfNodeForInfo?.childrenIds?.length > 0 && gameData) {
-        let maxChildMove = 0;
-        const q = [...(currentSgfNodeForInfo.childrenIds || [])];
-        const visited = new Set<string>();
-        while(q.length > 0) {
-            const childId = q.shift()!;
-            if (visited.has(childId) || !gameData.nodes[childId]) continue;
-            visited.add(childId);
-            maxChildMove = Math.max(maxChildMove, gameData.nodes[childId].moveNumber);
-            q.push(...(gameData.nodes[childId].childrenIds || []));
-        }
-        totalMovesForControls = maxChildMove;
-    }
-  }
-
   useEffect(() => {
     // Обновляем активный инструмент рисования в зависимости от выбранного инструмента
     if (activeEditTool === EditTool.DRAW_LINE) {
@@ -1295,14 +1310,14 @@ const App: React.FC = () => {
         start: point,
         end: point,
         color: currentDrawingColor, // Используем выбранный цвет
-        thickness: Math.max(2, getCellSize(boardSize) / 12)
+        thickness: Math.max(2, getCellSize(boardSize, isMobile) / 12)
       } as DrawingLine);
     } else if (currentDrawingType === DrawingMode.ARROW) {
       setTemporaryDrawing({
         start: point,
         end: point,
         color: currentDrawingColor, // Используем выбранный цвет
-        thickness: Math.max(2, getCellSize(boardSize) / 12)
+        thickness: Math.max(2, getCellSize(boardSize, isMobile) / 12)
       } as DrawingArrow);
     } else if (currentDrawingType === DrawingMode.FREEHAND) {
       setCurrentFreehandPath([point]);
@@ -1579,7 +1594,7 @@ const App: React.FC = () => {
         start: drawingStartPoint,
         end: point,
         color: currentDrawingColor, // Используем выбранный цвет
-        thickness: Math.max(2, getCellSize(boardSize) / 12)
+        thickness: Math.max(2, getCellSize(boardSize, isMobile) / 12)
       };
       setCurrentLines([...currentLines, newLine]);
       
@@ -1612,7 +1627,7 @@ const App: React.FC = () => {
         start: drawingStartPoint,
         end: point,
         color: currentDrawingColor, // Используем выбранный цвет
-        thickness: Math.max(2, getCellSize(boardSize) / 12)
+        thickness: Math.max(2, getCellSize(boardSize, isMobile) / 12)
       };
       setCurrentArrows([...currentArrows, newArrow]);
       
@@ -1645,7 +1660,7 @@ const App: React.FC = () => {
       const newPath: DrawingPath = {
         points: [...currentFreehandPath, point],
         color: currentDrawingColor, // Используем выбранный цвет
-        thickness: Math.max(2, getCellSize(boardSize) / 12)
+        thickness: Math.max(2, getCellSize(boardSize, isMobile) / 12)
       };
       setCurrentPaths([...currentPaths, newPath]);
       
@@ -1724,14 +1739,230 @@ const App: React.FC = () => {
       setCurrentEmojiPoint(null);
   };
 
+  const handleTouchStart = (event: React.TouchEvent, point: Point) => {
+    if (isDrawingMode) {
+      event.preventDefault();
+      setDrawingStartPoint(point);
+      setDrawingEndPoint(point);
+      
+      if (currentDrawingType === DrawingMode.LINE) {
+        setTemporaryDrawing({
+          start: point,
+          end: point,
+          color: currentDrawingColor,
+          thickness: Math.max(2, getCellSize(boardSize, isMobile) / 12)
+        } as DrawingLine);
+      } else if (currentDrawingType === DrawingMode.ARROW) {
+        setTemporaryDrawing({
+          start: point,
+          end: point,
+          color: currentDrawingColor,
+          thickness: Math.max(2, getCellSize(boardSize, isMobile) / 12)
+        } as DrawingArrow);
+      } else if (currentDrawingType === DrawingMode.FREEHAND) {
+        setCurrentFreehandPath([point]);
+      }
+    }
+  };
+
+  const handleTouchMove = (event: React.TouchEvent, point: Point) => {
+    if (isDrawingMode && drawingStartPoint) {
+      event.preventDefault();
+      setDrawingEndPoint(point);
+      
+      if (temporaryDrawing && (currentDrawingType === DrawingMode.LINE || currentDrawingType === DrawingMode.ARROW)) {
+        setTemporaryDrawing({
+          ...temporaryDrawing,
+          end: point
+        });
+      } else if (currentDrawingType === DrawingMode.FREEHAND) {
+        setCurrentFreehandPath(prev => [...prev, point]);
+      }
+    }
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent) => {
+    if (isDrawingMode && drawingStartPoint && drawingEndPoint) {
+      // Similar to handleDrawEnd but for touch events
+      if (drawingStartPoint.r === drawingEndPoint.r && drawingStartPoint.c === drawingEndPoint.c &&
+          (currentDrawingType === DrawingMode.LINE || currentDrawingType === DrawingMode.ARROW)) {
+        // Точки совпадают, не создаем линию/стрелку
+        setDrawingStartPoint(null);
+        setDrawingEndPoint(null);
+        setTemporaryDrawing(null);
+        return;
+      }
+      
+      if (currentDrawingType === DrawingMode.LINE) {
+        const newLine: DrawingLine = {
+          start: drawingStartPoint,
+          end: drawingEndPoint,
+          color: currentDrawingColor,
+          thickness: Math.max(2, getCellSize(boardSize, isMobile) / 12)
+        };
+        setCurrentLines([...currentLines, newLine]);
+        
+        // Сохраняем в SGF (аналогично handleDrawEnd)
+        if (gameData && currentNodeId) {
+          const updatedGameData = { ...gameData };
+          const updatedNode = { ...updatedGameData.nodes[currentNodeId] };
+          const updatedSgfProps = { ...updatedNode.sgfProps };
+          
+          const sgfStartCoord = utilPointToSgfCoord(drawingStartPoint);
+          const sgfEndCoord = utilPointToSgfCoord(drawingEndPoint);
+          const lnValue = `${sgfStartCoord}:${sgfEndCoord}`;
+          
+          if (!updatedSgfProps['LN']) updatedSgfProps['LN'] = [];
+          updatedSgfProps['LN'].push(lnValue);
+          
+          if (currentDrawingColor !== "#FF4500") {
+            if (!updatedSgfProps['CL']) updatedSgfProps['CL'] = [];
+            updatedSgfProps['CL'].push(`${lnValue}:${currentDrawingColor}`);
+          }
+          
+          updatedNode.sgfProps = updatedSgfProps;
+          updatedGameData.nodes[currentNodeId] = updatedNode;
+          setGameData(updatedGameData);
+        }
+      } else if (currentDrawingType === DrawingMode.ARROW) {
+        // Аналогично для стрелок
+        const newArrow: DrawingArrow = {
+          start: drawingStartPoint,
+          end: drawingEndPoint,
+          color: currentDrawingColor,
+          thickness: Math.max(2, getCellSize(boardSize, isMobile) / 12)
+        };
+        setCurrentArrows([...currentArrows, newArrow]);
+        
+        if (gameData && currentNodeId) {
+          const updatedGameData = { ...gameData };
+          const updatedNode = { ...updatedGameData.nodes[currentNodeId] };
+          const updatedSgfProps = { ...updatedNode.sgfProps };
+          
+          const sgfStartCoord = utilPointToSgfCoord(drawingStartPoint);
+          const sgfEndCoord = utilPointToSgfCoord(drawingEndPoint);
+          const arValue = `${sgfStartCoord}:${sgfEndCoord}`;
+          
+          if (!updatedSgfProps['AR']) updatedSgfProps['AR'] = [];
+          updatedSgfProps['AR'].push(arValue);
+          
+          if (currentDrawingColor !== "#FF4500") {
+            if (!updatedSgfProps['CA']) updatedSgfProps['CA'] = [];
+            updatedSgfProps['CA'].push(`${arValue}:${currentDrawingColor}`);
+          }
+          
+          updatedNode.sgfProps = updatedSgfProps;
+          updatedGameData.nodes[currentNodeId] = updatedNode;
+          setGameData(updatedGameData);
+        }
+      } else if (currentDrawingType === DrawingMode.FREEHAND && currentFreehandPath.length > 1) {
+        // Добавляем path для freehand рисования
+        const newPath: DrawingPath = {
+          points: [...currentFreehandPath],
+          color: currentDrawingColor,
+          thickness: Math.max(2, getCellSize(boardSize, isMobile) / 12)
+        };
+        setCurrentPaths([...currentPaths, newPath]);
+        
+        if (gameData && currentNodeId) {
+          const updatedGameData = { ...gameData };
+          const updatedNode = { ...updatedGameData.nodes[currentNodeId] };
+          const updatedSgfProps = { ...updatedNode.sgfProps };
+          
+          let pathCoords = "";
+          for (const pathPoint of currentFreehandPath) {
+            const sgfCoord = utilPointToSgfCoord(pathPoint);
+            pathCoords += sgfCoord;
+          }
+          
+          if (!updatedSgfProps['ZZ']) updatedSgfProps['ZZ'] = [];
+          updatedSgfProps['ZZ'].push(pathCoords);
+          
+          if (currentDrawingColor !== "#FF4500") {
+            if (!updatedSgfProps['ZC']) updatedSgfProps['ZC'] = [];
+            updatedSgfProps['ZC'].push(`${pathCoords.substring(0, 4)}:${currentDrawingColor}`);
+          }
+          
+          updatedNode.sgfProps = updatedSgfProps;
+          updatedGameData.nodes[currentNodeId] = updatedNode;
+          setGameData(updatedGameData);
+        }
+      }
+      
+      // Очищаем состояние рисования
+      setDrawingStartPoint(null);
+      setDrawingEndPoint(null);
+      setTemporaryDrawing(null);
+      setCurrentFreehandPath([]);
+    }
+  };
+
+  // Обеспечиваем доске правильный размер на мобильных устройствах
+  useEffect(() => {
+    if (boardContainerRef.current) {
+      const resizeBoard = () => {
+        if (isMobile) {
+          // Для мобильных - используем максимально доступное пространство
+          const viewportWidth = window.innerWidth;
+          // Получаем размер экрана с учетом небольших отступов
+          const availableWidth = viewportWidth - 20;
+          // Размер ячейки исходя из размера доски и доступной ширины
+          // Оставляем немного места для сетки и границ
+          const calculatedSize = Math.floor((availableWidth - 10) / boardSize);
+
+          setMobileCellSize(calculatedSize);
+        } else {
+          // Для десктопа используем фиксированные размеры
+          setMobileCellSize(null);
+        }
+      };
+      
+      resizeBoard();
+      window.addEventListener('resize', resizeBoard);
+      
+      return () => {
+        window.removeEventListener('resize', resizeBoard);
+      };
+    }
+  }, [isMobile, boardSize]);
+
+  // Измененный метод получения размера ячейки с учетом мобильного состояния
+  const getCurrentCellSize = useCallback(() => {
+    // Если есть мобильный размер, используем его, иначе используем стандартный размер
+    return mobileCellSize || getCellSize(boardSize, isMobile);
+  }, [boardSize, isMobile, mobileCellSize]);
+
+  let totalMovesForControls = maxMainLineMoveNumber;
+  if (isEditMode && (!sgfFileName || gameData?.info?.name === "New Game")) {
+    if (currentSgfNodeForInfo && currentSgfNodeForInfo.moveNumber > totalMovesForControls) {
+        totalMovesForControls = currentSgfNodeForInfo.moveNumber;
+    }
+    if (totalMovesForControls === 0 && currentSgfNodeForInfo?.childrenIds?.length > 0 && gameData) {
+        let maxChildMove = 0;
+        const q = [...(currentSgfNodeForInfo.childrenIds || [])];
+        const visited = new Set<string>();
+        while(q.length > 0) {
+            const childId = q.shift()!;
+            if (visited.has(childId) || !gameData.nodes[childId]) continue;
+            visited.add(childId);
+            maxChildMove = Math.max(maxChildMove, gameData.nodes[childId].moveNumber);
+            q.push(...(gameData.nodes[childId].childrenIds || []));
+        }
+        totalMovesForControls = maxChildMove;
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gray-200 dark:bg-gray-900 py-4 px-2 sm:px-4 lg:px-6 text-gray-800 dark:text-gray-200">
-      <header className="text-center mb-6">
-        <h1 className="text-3xl sm:text-4xl font-bold text-gray-800 dark:text-gray-100">Go Board SGF Viewer</h1>
+    <div className="min-h-screen bg-gray-200 dark:bg-gray-900 py-2 px-1 sm:py-4 sm:px-2 lg:px-6 text-gray-800 dark:text-gray-200">
+      <header className={`text-center ${isMobile ? 'mb-2' : 'mb-3 sm:mb-6'}`}>
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-800 dark:text-gray-100">Go Board SGF Viewer</h1>
       </header>
 
-      <div className="max-w-full mx-auto grid grid-cols-1 lg:grid-cols-[minmax(300px,auto)_1fr_minmax(280px,auto)] gap-4">
-        <div className="space-y-4 order-1 lg:order-none">
+      {/* На мобильных используем flex-col, на десктопе - сетку с тремя колонками */}
+      <div className={`max-w-full mx-auto ${isMobile ? 'flex flex-col space-y-2' : 'grid grid-cols-1 lg:grid-cols-[minmax(250px,auto)_1fr_minmax(250px,auto)] gap-4'}`}>
+        
+        {/* Элементы управления - слева на десктопе, сверху на мобильных */}
+        <div className={`${isMobile ? 'order-1 px-1' : 'space-y-4 order-1'}`}>
           <Controls
             onSgfLoad={handleSgfLoad}
             currentMove={currentMoveIndexForSlider} 
@@ -1742,18 +1973,21 @@ const App: React.FC = () => {
             onToggleEditMode={handleToggleEditMode}
             onDownloadSgf={handleDownloadSgf}
             canDownload={!!gameData}
+            isMobile={isMobile}
           />
+          
           {isEditMode && (
-            <>
+            <div className={`${isMobile ? 'mt-2' : ''}`}>
               <EditToolbar 
                 activeTool={activeEditTool} 
-                onToolSelect={setActiveEditTool} 
+                onToolSelect={setActiveEditTool}
+                isMobile={isMobile}
               />
-              {/* Панель выбора цвета */}
-              {(activeEditTool === EditTool.DRAW_LINE || 
+              {/* На мобильных оставляем только основные элементы управления цветом */}
+              {!isMobile && (activeEditTool === EditTool.DRAW_LINE || 
                 activeEditTool === EditTool.DRAW_ARROW || 
                 activeEditTool === EditTool.DRAW_FREEHAND) && (
-                <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow space-y-3">
+                <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow space-y-3 mt-3">
                   <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200 border-b pb-2 mb-2 dark:border-gray-700">
                     Цвет рисования
                   </h3>
@@ -1771,140 +2005,189 @@ const App: React.FC = () => {
                   </div>
                 </div>
               )}
-            </>
+            </div>
           )}
-          <GameInfo 
-            info={gameData?.info || (isEditMode ? { boardSize: DEFAULT_BOARD_SIZE, name: "New Game"} as SgfGameInfo : null)}
-            currentMoveData={ currentSgfNodeForInfo ? { 
-                id: currentSgfNodeForInfo.id,
-                player: currentSgfNodeForInfo.player!, coord: currentSgfNodeForInfo.coord || null, comment: currentSgfNodeForInfo.comment,
-                boardStateAfterMove: currentSgfNodeForInfo.boardState, stonesCapturedInThisMove: currentSgfNodeForInfo.stonesCapturedInThisStep,
-                totalCapturedByBlack: currentSgfNodeForInfo.totalCapturedByBlack, totalCapturedByWhite: currentSgfNodeForInfo.totalCapturedByWhite,
-                koStateAfterMove: currentSgfNodeForInfo.koState, moveNumber: currentSgfNodeForInfo.moveNumber
-            } : null}
-            currentPlayerTurn={isEditMode ? editModePlayer : currentPlayerForInfo} 
-            isEditMode={isEditMode}
-            editModePlayerTurn={isEditMode ? editModePlayer : undefined} 
-            editModeCaptures={isEditMode ? editModeCaptures : undefined}
-          />
-          {!isEditMode && currentSgfNodeForInfo && <CommentsDisplay comment={currentSgfNodeForInfo.comment} />}
+
+          {/* Основная информация о партии */}
+          {!isMobile && (
+            <div>
+              <GameInfo 
+                info={gameData?.info || (isEditMode ? { boardSize: DEFAULT_BOARD_SIZE, name: "New Game"} as SgfGameInfo : null)}
+                currentMoveData={ currentSgfNodeForInfo ? { 
+                  id: currentSgfNodeForInfo.id,
+                  player: currentSgfNodeForInfo.player!, coord: currentSgfNodeForInfo.coord || null, comment: currentSgfNodeForInfo.comment,
+                  boardStateAfterMove: currentSgfNodeForInfo.boardState, stonesCapturedInThisMove: currentSgfNodeForInfo.stonesCapturedInThisStep,
+                  totalCapturedByBlack: currentSgfNodeForInfo.totalCapturedByBlack, totalCapturedByWhite: currentSgfNodeForInfo.totalCapturedByWhite,
+                  koStateAfterMove: currentSgfNodeForInfo.koState, moveNumber: currentSgfNodeForInfo.moveNumber
+                } : null}
+                currentPlayerTurn={isEditMode ? editModePlayer : currentPlayerForInfo} 
+                isEditMode={isEditMode}
+                editModePlayerTurn={isEditMode ? editModePlayer : undefined} 
+                editModeCaptures={isEditMode ? editModeCaptures : undefined}
+                isMobile={isMobile}
+              />
+            </div>
+          )}
+          
+          {/* Комментарии для десктопа */}
+          {!isEditMode && currentSgfNodeForInfo && !isMobile && <CommentsDisplay comment={currentSgfNodeForInfo.comment} />}
         </div>
 
-        <div className="flex flex-col items-center justify-start order-first lg:order-none">
-           <div className="bg-white dark:bg-gray-800 p-2 sm:p-4 rounded-lg shadow-xl inline-block">
-             <GoBoard
-                boardSize={boardSize}
-                boardState={boardState}
-                lastMove={lastPlayedMoveCoord}
-                koPoint={currentFullKoState.koPoint} 
-                onIntersectionClick={handleBoardClick} 
-                cellSize={getCellSize(boardSize)}
-                triangles={currentTriangles}
-                squares={currentSquares}
-                circles={currentCircles}
-                marks={currentMarks}
-                labels={currentLabels}
-                // Пропсы для рисования
-                lines={temporaryDrawing && currentDrawingType === DrawingMode.LINE 
-                  ? [...currentLines, temporaryDrawing as DrawingLine] 
-                  : currentLines}
-                arrows={temporaryDrawing && currentDrawingType === DrawingMode.ARROW 
-                  ? [...currentArrows, temporaryDrawing as DrawingArrow] 
-                  : currentArrows}
-                paths={currentPaths}
-                isDrawingMode={isDrawingMode}
-                drawingMode={currentDrawingType}
-                onDrawStart={handleDrawStart}
-                onDrawMove={handleDrawMove}
-                onDrawEnd={handleDrawEnd}
-                onRemoveDrawing={handleRemoveDrawing}
-              />
-           </div>
+        {/* Доска - ВСЕГДА в центре, как на мобильных, так и на десктопе */}
+        <div className={`flex flex-col items-center justify-start ${isMobile ? 'order-2 w-full' : 'order-2'}`}>
+          <div 
+            ref={boardContainerRef}
+            className={`bg-white dark:bg-gray-800 ${isMobile ? 'p-0.5 sm:p-1' : 'p-1 sm:p-2 md:p-4'} rounded-lg shadow-xl ${isMobile ? 'w-full' : 'inline-block'} overflow-auto max-w-full`}
+          >
+            <GoBoard
+              boardSize={boardSize}
+              boardState={boardState}
+              lastMove={lastPlayedMoveCoord}
+              koPoint={currentFullKoState.koPoint} 
+              onIntersectionClick={handleBoardClick}
+              cellSize={getCurrentCellSize()}
+              triangles={currentTriangles}
+              squares={currentSquares}
+              circles={currentCircles}
+              marks={currentMarks}
+              labels={currentLabels}
+              lines={temporaryDrawing && currentDrawingType === DrawingMode.LINE 
+                ? [...currentLines, temporaryDrawing as DrawingLine] 
+                : currentLines}
+              arrows={temporaryDrawing && currentDrawingType === DrawingMode.ARROW 
+                ? [...currentArrows, temporaryDrawing as DrawingArrow] 
+                : currentArrows}
+              paths={currentPaths}
+              isDrawingMode={isDrawingMode}
+              drawingMode={currentDrawingType}
+              onDrawStart={handleDrawStart}
+              onDrawMove={handleDrawMove}
+              onDrawEnd={handleDrawEnd}
+              onRemoveDrawing={handleRemoveDrawing}
+              isMobile={isMobile}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            />
+          </div>
            
-           {/* Выбор цвета под доской */}
-           {isEditMode && (activeEditTool === EditTool.DRAW_LINE || 
-              activeEditTool === EditTool.DRAW_ARROW || 
-              activeEditTool === EditTool.DRAW_FREEHAND || 
-              activeEditTool === EditTool.REMOVE_DRAWING) && (
-              <div className="mt-4 bg-white dark:bg-gray-800 p-3 rounded-lg shadow-md w-full">
-                {/* Отображаем информацию о текущем инструменте */}
-                <div className="mb-2 text-center">
-                  <span className="font-semibold text-gray-700 dark:text-gray-300">
-                    {toolDisplayInfo[activeEditTool]?.label || 'Рисование'} 
-                    {activeEditTool === EditTool.DRAW_LINE && " - протяните линию между точками"}
-                    {activeEditTool === EditTool.DRAW_ARROW && " - протяните стрелку между точками"}
-                    {activeEditTool === EditTool.DRAW_FREEHAND && " - рисуйте свободно, как в Paint"}
-                    {activeEditTool === EditTool.REMOVE_DRAWING && " - кликните по рисунку для удаления"}
-                  </span>
-                  {activeEditTool !== EditTool.REMOVE_DRAWING && (
-                    <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
-                      (клавиша {
-                        activeEditTool === EditTool.DRAW_LINE ? 'L' : 
-                        activeEditTool === EditTool.DRAW_ARROW ? 'A' : 
-                        activeEditTool === EditTool.DRAW_FREEHAND ? 'F' : ''
-                      })
-                    </span>
+          {/* Компактная панель выбора цвета под доской */}
+          {isEditMode && (activeEditTool === EditTool.DRAW_LINE || 
+            activeEditTool === EditTool.DRAW_ARROW || 
+            activeEditTool === EditTool.DRAW_FREEHAND || 
+            activeEditTool === EditTool.REMOVE_DRAWING) && (
+            <div className={`mt-2 sm:mt-4 bg-white dark:bg-gray-800 p-2 sm:p-3 rounded-lg shadow-md ${isMobile ? 'w-full' : 'w-full'} ${isMobile ? 'text-sm' : ''}`}>
+              {/* Отображаем компактную информацию о текущем инструменте */}
+              <div className={`${isMobile ? 'mb-1' : 'mb-2'} text-center`}>
+                <span className="font-semibold text-gray-700 dark:text-gray-300">
+                  {toolDisplayInfo[activeEditTool]?.label || 'Рисование'} 
+                  {!isMobile && (
+                    <>
+                      {activeEditTool === EditTool.DRAW_LINE && " - протяните линию между точками"}
+                      {activeEditTool === EditTool.DRAW_ARROW && " - протяните стрелку между точками"}
+                      {activeEditTool === EditTool.DRAW_FREEHAND && " - рисуйте свободно"}
+                      {activeEditTool === EditTool.REMOVE_DRAWING && " - кликните по рисунку для удаления"}
+                    </>
                   )}
-                </div>
-                
-                {/* Палитра цветов */}
-                {activeEditTool !== EditTool.REMOVE_DRAWING && (
-                  <div className="flex flex-wrap justify-center gap-2">
-                    <span className="text-sm text-gray-600 dark:text-gray-400 mr-2 self-center">Цвет:</span>
-                    {/* Основные цвета */}
-                    {["#FF4500", "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF"].map(color => (
-                      <button
-                        key={color}
-                        onClick={() => handleColorChange(color)}
-                        className={`w-8 h-8 rounded-full border-2 ${currentDrawingColor === color ? 'border-4 border-gray-500 scale-110' : 'border border-gray-300'}`}
-                        style={{ backgroundColor: color }}
-                        aria-label={`Выбрать цвет ${color}`}
-                        title={color}
-                      />
-                    ))}
-                    {/* Дополнительные цвета */}
-                    {["#FFA500", "#800080", "#008000", "#000080", "#A52A2A", "#000000", "#FFFFFF"].map(color => (
-                      <button
-                        key={color}
-                        onClick={() => handleColorChange(color)}
-                        className={`w-8 h-8 rounded-full border-2 ${currentDrawingColor === color ? 'border-4 border-gray-500 scale-110' : 'border border-gray-300'}`}
-                        style={{ backgroundColor: color }}
-                        aria-label={`Выбрать цвет ${color}`}
-                        title={color}
-                      />
-                    ))}
-                  </div>
+                </span>
+                {!isMobile && activeEditTool !== EditTool.REMOVE_DRAWING && (
+                  <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                    (клавиша {
+                      activeEditTool === EditTool.DRAW_LINE ? 'L' : 
+                      activeEditTool === EditTool.DRAW_ARROW ? 'A' : 
+                      activeEditTool === EditTool.DRAW_FREEHAND ? 'F' : ''
+                    })
+                  </span>
                 )}
               </div>
-            )}
-           
-           {isEditMode && activeEditTool && toolDisplayInfo[activeEditTool] && !["DRAW_LINE", "DRAW_ARROW", "DRAW_FREEHAND", "REMOVE_DRAWING"].includes(activeEditTool) &&
-             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-               Активный инструмент: {toolDisplayInfo[activeEditTool]?.label || 'Select'}. 
-               {activeEditTool === EditTool.REMOVE_DRAWING ? " Кликните по линии, стрелке или рисунку, чтобы удалить." : ""}
-             </p>
-           }
-           {!isEditMode && gameData?.info.name === "New Game" &&
-             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Click on the board to play a move.</p>
-           }
+              
+              {/* Компактная палитра цветов */}
+              {activeEditTool !== EditTool.REMOVE_DRAWING && (
+                <div className="flex flex-wrap justify-center gap-1 sm:gap-2">
+                  {isMobile ? null : <span className="text-sm text-gray-600 dark:text-gray-400 mr-2 self-center">Цвет:</span>}
+                  {/* Основные цвета */}
+                  {["#FF4500", "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF"].map(color => (
+                    <button
+                      key={color}
+                      onClick={() => handleColorChange(color)}
+                      className={`${isMobile ? 'w-8 h-8' : 'w-8 h-8'} rounded-full border-2 ${currentDrawingColor === color ? 'border-4 border-gray-500 scale-110' : 'border border-gray-300'}`}
+                      style={{ backgroundColor: color }}
+                      aria-label={`Выбрать цвет ${color}`}
+                      title={color}
+                    />
+                  ))}
+                  {/* На мобильных показываем меньше цветов */}
+                  {!isMobile && ["#FFA500", "#800080", "#008000", "#000080", "#A52A2A", "#000000", "#FFFFFF"].map(color => (
+                    <button
+                      key={color}
+                      onClick={() => handleColorChange(color)}
+                      className={`w-8 h-8 rounded-full border-2 ${currentDrawingColor === color ? 'border-4 border-gray-500 scale-110' : 'border border-gray-300'}`}
+                      style={{ backgroundColor: color }}
+                      aria-label={`Выбрать цвет ${color}`}
+                      title={color}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {isMobile && (
+            <div className="mt-2 w-full">
+              <GameInfo 
+                info={gameData?.info || (isEditMode ? { boardSize: DEFAULT_BOARD_SIZE, name: "New Game"} as SgfGameInfo : null)}
+                currentMoveData={ currentSgfNodeForInfo ? { 
+                  id: currentSgfNodeForInfo.id,
+                  player: currentSgfNodeForInfo.player!, coord: currentSgfNodeForInfo.coord || null, comment: currentSgfNodeForInfo.comment,
+                  boardStateAfterMove: currentSgfNodeForInfo.boardState, stonesCapturedInThisMove: currentSgfNodeForInfo.stonesCapturedInThisStep,
+                  totalCapturedByBlack: currentSgfNodeForInfo.totalCapturedByBlack, totalCapturedByWhite: currentSgfNodeForInfo.totalCapturedByWhite,
+                  koStateAfterMove: currentSgfNodeForInfo.koState, moveNumber: currentSgfNodeForInfo.moveNumber
+                } : null}
+                currentPlayerTurn={isEditMode ? editModePlayer : currentPlayerForInfo} 
+                isEditMode={isEditMode}
+                editModePlayerTurn={isEditMode ? editModePlayer : undefined} 
+                editModeCaptures={isEditMode ? editModeCaptures : undefined}
+                isMobile={isMobile}
+              />
+            </div>
+          )}
+          
+          {isEditMode && activeEditTool && toolDisplayInfo[activeEditTool] && !["DRAW_LINE", "DRAW_ARROW", "DRAW_FREEHAND", "REMOVE_DRAWING"].includes(activeEditTool) &&
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              Активный инструмент: {toolDisplayInfo[activeEditTool]?.label || 'Select'}. 
+              {activeEditTool === EditTool.REMOVE_DRAWING ? " Кликните по линии, стрелке или рисунку, чтобы удалить." : ""}
+            </p>
+          }
+          {!isEditMode && gameData?.info.name === "New Game" &&
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Click on the board to play a move.</p>
+          }
         </div>
         
-        <div className="order-last lg:order-none">
-            {gameData && gameData.rootNodeId && (
-                <MoveTreeDisplay 
-                    nodes={gameData.nodes}
-                    rootId={gameData.rootNodeId}
-                    activeNodeId={currentNodeId}
-                    onNodeSelect={(nodeId) => navigateToNode(nodeId)} 
-                    isEditMode={isEditMode}
-                    boardSize={gameData.info.boardSize} 
-                    activePath={activePath} 
-                />
-            )}
+        {/* Дерево ходов - справа на десктопе, внизу на мобильных */}
+        <div className={`${isMobile ? 'order-3 mt-3' : 'order-3'}`}>
+          {gameData && gameData.rootNodeId && (
+            <MoveTreeDisplay 
+              nodes={gameData.nodes}
+              rootId={gameData.rootNodeId}
+              activeNodeId={currentNodeId}
+              onNodeSelect={nodeId => navigateToNode(nodeId)} 
+              isEditMode={isEditMode}
+              boardSize={gameData.info.boardSize} 
+              activePath={activePath}
+              isMobile={isMobile}
+            />
+          )}
         </div>
+
+        {/* На мобильных устройствах показываем комментарии в конце */}
+        {!isEditMode && currentSgfNodeForInfo && isMobile && (
+          <div className="order-4 mt-3 px-1">
+            <CommentsDisplay comment={currentSgfNodeForInfo.comment} />
+          </div>
+        )}
       </div>
       
-      <footer className="text-center mt-12 py-4 text-gray-600 dark:text-gray-300 text-sm">
+      <footer className={`text-center ${isMobile ? 'mt-6 py-2' : 'mt-12 py-4'} text-gray-600 dark:text-gray-300 text-sm`}>
         Go Board SGF Viewer - Advanced Baduk/Weiqi Experience
       </footer>
       
@@ -1914,7 +2197,28 @@ const App: React.FC = () => {
         position={emojiPickerPosition}
         onClose={() => setIsEmojiPickerOpen(false)}
         onSelect={handleEmojiSelect}
+        isMobile={isMobile}
       />
+
+      {/* Плавающие кнопки навигации для мобильных */}
+      {isMobile && (
+        <div className="fixed bottom-4 right-4 flex flex-col gap-2">
+          <button 
+            onClick={() => handleNavigation('prev')}
+            className="w-12 h-12 bg-gray-800 dark:bg-gray-600 text-white p-2 rounded-full shadow-lg text-xl flex items-center justify-center"
+            aria-label="Предыдущий ход"
+          >
+            ←
+          </button>
+          <button 
+            onClick={() => handleNavigation('next')}
+            className="w-12 h-12 bg-gray-800 dark:bg-gray-600 text-white p-2 rounded-full shadow-lg text-xl flex items-center justify-center" 
+            aria-label="Следующий ход"
+          >
+            →
+          </button>
+        </div>
+      )}
     </div>
   );
 };
