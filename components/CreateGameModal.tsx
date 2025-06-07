@@ -86,8 +86,24 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ isOpen, onClose, onCr
   // Если модальное окно закрыто, ничего не рендерим
   if (!isOpen) return null;
   
+  // Валидация перед отправкой формы
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Валидация для настроек времени
+    if (timeEnabled) {
+      // Проверяем, что периоды бёёми указаны, если основное время равно 0
+      if (mainTime === 0 && (byoyomi === 0 || periods === 0)) {
+        alert("Если основное время равно 0, необходимо указать время бёёми и количество периодов больше 0.");
+        return;
+      }
+      
+      // Проверяем, что указан хотя бы один тип времени
+      if (mainTime === 0 && byoyomi === 0) {
+        alert("Должно быть указано основное время или время бёёми.");
+        return;
+      }
+    }
     
     try {
       // Создаем объект с настройками игры
@@ -293,7 +309,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ isOpen, onClose, onCr
                     type="number"
                     value={mainTime}
                     onChange={(e) => setMainTime(parseIntSafe(e.target.value))}
-                    min="1"
+                    min="0"
                     className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   />
                 </div>

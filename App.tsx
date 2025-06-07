@@ -12,6 +12,8 @@ import { createEmptyBoard, applyMove, cloneBoard, getGroupAndLiberties } from '.
 import { DEFAULT_BOARD_SIZE, DEFAULT_KOMI } from './constants'; 
 import EmojiPicker from './components/EmojiPicker';
 import CreateGameModal, { GameSettings } from './components/CreateGameModal';
+import TimeClock from './components/TimeClock';
+import GameControls from './components/GameControls';
 
 // Helper to generate unique IDs for nodes created in edit mode or normal play
 function generateDisplayNodeId(): string {
@@ -260,6 +262,13 @@ const App: React.FC = () => {
   const isMobile = useMobileDetect();
   const boardContainerRef = useRef<HTMLDivElement>(null);
   const [mobileCellSize, setMobileCellSize] = useState<number | null>(null);
+
+  // Состояния для управления часами
+  const [timeControlEnabled, setTimeControlEnabled] = useState<boolean>(false);
+  const [mainTimeInSeconds, setMainTimeInSeconds] = useState<number>(0);
+  const [byoyomiInSeconds, setByoyomiInSeconds] = useState<number>(0);
+  const [byoyomiPeriods, setByoyomiPeriods] = useState<number>(0);
+  const [isClockActive, setIsClockActive] = useState<boolean>(false);
 
   const updateStateFromNodeId = useCallback((nodeId: string | null, newGameData?: FullGameData | null) => { 
     const dataToUse = newGameData === undefined ? gameData : newGameData; 
@@ -561,15 +570,14 @@ const App: React.FC = () => {
         }
     }
     
-    // Добавляем информацию о времени, если оно включено
+    // Если включены настройки времени, сохраняем их
     if (gameSettings?.timeSettings?.enabled) {
-        const { mainTime, byoyomi, periods } = gameSettings.timeSettings;
-        if (mainTime > 0) {
-            initialRootNodeSgfProps.TM = [String(mainTime * 60)]; // TM в секундах
-        }
-        if (byoyomi > 0 && periods > 0) {
-            initialRootNodeSgfProps.OT = [`${byoyomi} sec/${periods} periods`];
-        }
+      setTimeControlEnabled(true);
+      setMainTimeInSeconds(gameSettings.timeSettings.mainTime * 60); // Конвертируем минуты в секунды
+      setByoyomiInSeconds(gameSettings.timeSettings.byoyomi);
+      setByoyomiPeriods(gameSettings.timeSettings.periods);
+    } else {
+      setTimeControlEnabled(false);
     }
 
     const newGameInfo: SgfGameInfo = {
@@ -633,6 +641,18 @@ const App: React.FC = () => {
       setIsEditMode(true);
       setActiveEditTool(EditTool.EDIT_MODE_SELECT);
       setEditModeCaptures({ black: 0, white: 0 });
+      
+      // Сбрасываем состояние часов
+      if (gameSettings.timeSettings?.enabled) {
+        setTimeControlEnabled(true);
+        setMainTimeInSeconds(gameSettings.timeSettings.mainTime * 60); // Конвертируем минуты в секунды
+        setByoyomiInSeconds(gameSettings.timeSettings.byoyomi);
+        setByoyomiPeriods(gameSettings.timeSettings.periods);
+        setIsClockActive(false); // Изначально часы остановлены
+      } else {
+        setTimeControlEnabled(false);
+        setIsClockActive(false);
+      }
       
       // Явно закрываем модальное окно перед выходом из функции
       setTimeout(() => {
@@ -1057,7 +1077,9 @@ const App: React.FC = () => {
             const newFullGameData = { ...gameData, nodes: newNodes };
             setGameData(newFullGameData);
 
+            // Переключаем активного игрока
             setEditModePlayer(playerMakingMove === StoneColor.Black ? StoneColor.White : StoneColor.Black);
+            
             const newEditCaptures = { ...editModeCaptures };
             if (playerMakingMove === StoneColor.Black) {
                 newEditCaptures.black += moveResult.stonesCapturedInThisMove.length;
@@ -1071,7 +1093,7 @@ const App: React.FC = () => {
             }
             
             navigateToNode(newNodeId, newFullGameData); 
-            return; 
+            return;
 
         }
         
@@ -1342,6 +1364,11 @@ const App: React.FC = () => {
             }
             navigateToNode(newNodeId, newFullGameData);
         }
+    }
+    
+    // Если ход сделан и включен контроль времени, активируем часы
+    if (timeControlEnabled && !isClockActive && isEditMode) {
+      setIsClockActive(true);
     }
   };
 
@@ -2037,6 +2064,34 @@ const App: React.FC = () => {
     }
   }
 
+  // Обработчик истечения времени
+  const handleTimeExpired = () => {
+    setIsClockActive(false);
+    alert("Время вышло!");
+  };
+  
+  // Переключение активного игрока для часов
+  const switchActivePlayer = () => {
+    if (timeControlEnabled) {
+      // Если ходит другой игрок, переключаем активного игрока
+      setEditModePlayer(editModePlayer === StoneColor.Black ? StoneColor.White : StoneColor.Black);
+    }
+  };
+  
+  // Обработчик для пропуска хода
+  const handlePass = () => {
+    if (isEditMode && timeControlEnabled) {
+      switchActivePlayer();
+    }
+  };
+  
+  // Обработчик для паузы/запуска часов
+  const handlePauseResumeClock = () => {
+    if (timeControlEnabled) {
+      setIsClockActive(!isClockActive);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-200 dark:bg-gray-900 py-2 px-1 sm:py-4 sm:px-2 lg:px-6 text-gray-800 dark:text-gray-200">
       {/* Модальное окно создания игры */}
@@ -2068,6 +2123,29 @@ const App: React.FC = () => {
             isMobile={isMobile}
             onCreateGameClick={() => setIsCreateGameModalOpen(true)}
           />
+          
+          {isEditMode && (
+            <GameControls 
+              isEditMode={isEditMode}
+              timeControlEnabled={timeControlEnabled}
+              isClockActive={isClockActive}
+              currentPlayer={editModePlayer}
+              onPass={handlePass}
+              onPauseResumeClock={handlePauseResumeClock}
+            />
+          )}
+          
+          {/* Часы - показываем, только если включен контроль времени */}
+          {timeControlEnabled && (
+            <TimeClock 
+              isActive={isClockActive}
+              playerTurn={editModePlayer}
+              initialMainTime={mainTimeInSeconds}
+              byoyomi={byoyomiInSeconds}
+              periods={byoyomiPeriods}
+              onTimeExpired={handleTimeExpired}
+            />
+          )}
           
           {isEditMode && (
             <div className={`${isMobile ? 'mt-2' : ''}`}>
