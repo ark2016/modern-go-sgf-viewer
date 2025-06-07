@@ -11,6 +11,7 @@ import { generateSgfString } from './services/sgfGenerator';
 import { createEmptyBoard, applyMove, cloneBoard, getGroupAndLiberties } from './services/goLogic';
 import { DEFAULT_BOARD_SIZE, DEFAULT_KOMI } from './constants'; 
 import EmojiPicker from './components/EmojiPicker';
+import CreateGameModal, { GameSettings } from './components/CreateGameModal';
 
 // Helper to generate unique IDs for nodes created in edit mode or normal play
 function generateDisplayNodeId(): string {
@@ -252,6 +253,9 @@ const App: React.FC = () => {
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState<boolean>(false);
   const [emojiPickerPosition, setEmojiPickerPosition] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
   const [currentEmojiPoint, setCurrentEmojiPoint] = useState<Point | null>(null);
+  
+  // Состояние для модального окна создания игры
+  const [isCreateGameModalOpen, setIsCreateGameModalOpen] = useState<boolean>(false);
 
   const isMobile = useMobileDetect();
   const boardContainerRef = useRef<HTMLDivElement>(null);
@@ -514,28 +518,74 @@ const App: React.FC = () => {
     }
   }, [gameData, currentNodeId, activePath, maxMainLineMoveNumber, navigateToNode]);
 
-  const createNewGameData = (): FullGameData => {
+  const createNewGameData = (gameSettings?: GameSettings): FullGameData => {
     const newRootId = generateDisplayNodeId();
-    const initialBoardState = createEmptyBoard(DEFAULT_BOARD_SIZE);
-    const initialRootNodeSgfProps = {
-        C: ["Game created in editor."],
-        PL: [StoneColor.Black], 
-        SZ: [String(DEFAULT_BOARD_SIZE)],
-        KM: [String(DEFAULT_KOMI)],
+    const boardSize = gameSettings?.boardSize || DEFAULT_BOARD_SIZE;
+    const komi = gameSettings?.komi || DEFAULT_KOMI;
+    const handicap = gameSettings?.handicap || 0;
+    const initialBoardState = createEmptyBoard(boardSize);
+    
+    // Определяем, какой игрок ходит первым, на основе настроек
+    const initialPlayer = (handicap > 0) ? StoneColor.White : StoneColor.Black;
+    
+    const initialRootNodeSgfProps: Record<string, string[]> = {
+        C: ["Game created in Modern Go SGF Viewer."],
+        PL: [initialPlayer], 
+        SZ: [String(boardSize)],
+        KM: [String(komi)],
         AP: ["GoBoardSGFViewer_Online"],
         GM: ["1"], FF: ["4"], CA: ["UTF-8"], ST: ["2"]
     };
+    
+    // Добавляем handicap, если он указан
+    if (handicap > 0) {
+        initialRootNodeSgfProps.HA = [String(handicap)];
+        
+        // Добавляем начальные камни для handicap
+        let handicapPoints: { r: number; c: number }[] = [];
+        if (boardSize === 19) {
+            handicapPoints = HANDICAP_POINTS_19[handicap] || [];
+        } else if (boardSize === 13) {
+            handicapPoints = HANDICAP_POINTS_13[handicap] || [];
+        } else if (boardSize === 9) {
+            handicapPoints = HANDICAP_POINTS_9[handicap] || [];
+        }
+        
+        if (handicapPoints.length > 0) {
+            initialRootNodeSgfProps.AB = handicapPoints.map(p => utilPointToSgfCoord(p));
+            
+            // Расставляем камни на доске
+            handicapPoints.forEach(p => {
+                initialBoardState[p.r][p.c] = StoneColor.Black;
+            });
+        }
+    }
+    
+    // Добавляем информацию о времени, если оно включено
+    if (gameSettings?.timeSettings?.enabled) {
+        const { mainTime, byoyomi, periods } = gameSettings.timeSettings;
+        if (mainTime > 0) {
+            initialRootNodeSgfProps.TM = [String(mainTime * 60)]; // TM в секундах
+        }
+        if (byoyomi > 0 && periods > 0) {
+            initialRootNodeSgfProps.OT = [`${byoyomi} sec/${periods} periods`];
+        }
+    }
 
     const newGameInfo: SgfGameInfo = {
-        name: "New Game",
-        boardSize: DEFAULT_BOARD_SIZE,
-        komi: DEFAULT_KOMI,
-        playerBlack: "Black",
-        playerWhite: "White",
-        sgfComment: "Game created in editor.",
+        name: "Новая игра",
+        boardSize: boardSize,
+        komi: komi,
+        handicap: handicap,
+        playerBlack: gameSettings?.playerBlack || "Черные",
+        playerWhite: gameSettings?.playerWhite || "Белые",
+        rankBlack: gameSettings?.rankBlack || "",
+        rankWhite: gameSettings?.rankWhite || "",
+        sgfComment: "Игра создана в Modern Go SGF Viewer.",
         originalRootSgfProps: { ...initialRootNodeSgfProps },
         parsedRootNodeId: newRootId, 
     };
+    
     const rootNode: GameTreeNode = {
         id: newRootId,
         parentId: null,
@@ -551,12 +601,47 @@ const App: React.FC = () => {
         koState: { koPoint: null, boardSnapshotBeforeKoTrigger: null },
         isMainLineNext: false,
     };
+    
     return {
         info: newGameInfo,
         rootNodeId: newRootId,
         nodes: { [newRootId]: rootNode },
-        initialPlayerForDisplay: StoneColor.Black,
+        initialPlayerForDisplay: initialPlayer,
     };
+  };
+  
+  // Обработчик создания новой игры
+  const handleCreateGame = (gameSettings: GameSettings) => {
+    try {
+      // Создаем новую игру с указанными настройками
+      const newGameData = createNewGameData(gameSettings);
+      
+      // Обновляем состояние приложения
+      setGameData(newGameData);
+      setSgfFileName(null);
+      setMaxMainLineMoveNumber(0);
+      updateStateFromNodeId(newGameData.rootNodeId, newGameData);
+      
+      // Если пользователь выбрал белый цвет, то он играет за белых, иначе за черных
+      if (gameSettings.playerColor === StoneColor.White) {
+        setEditModePlayer(StoneColor.White);
+      } else {
+        setEditModePlayer(StoneColor.Black);
+      }
+      
+      // Включаем режим редактирования
+      setIsEditMode(true);
+      setActiveEditTool(EditTool.EDIT_MODE_SELECT);
+      setEditModeCaptures({ black: 0, white: 0 });
+      
+      // Явно закрываем модальное окно перед выходом из функции
+      setTimeout(() => {
+        setIsCreateGameModalOpen(false);
+      }, 0);
+    } catch (error) {
+      console.error("Ошибка при создании игры:", error);
+      alert("Произошла ошибка при создании игры. Пожалуйста, попробуйте снова.");
+    }
   };
 
   const handleToggleEditMode = useCallback(() => {
@@ -1954,6 +2039,13 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-200 dark:bg-gray-900 py-2 px-1 sm:py-4 sm:px-2 lg:px-6 text-gray-800 dark:text-gray-200">
+      {/* Модальное окно создания игры */}
+      <CreateGameModal 
+        isOpen={isCreateGameModalOpen}
+        onClose={() => setIsCreateGameModalOpen(false)}
+        onCreateGame={handleCreateGame}
+      />
+      
       <header className={`text-center ${isMobile ? 'mb-2' : 'mb-3 sm:mb-6'}`}>
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-800 dark:text-gray-100">Go Board SGF Viewer</h1>
       </header>
@@ -1974,6 +2066,7 @@ const App: React.FC = () => {
             onDownloadSgf={handleDownloadSgf}
             canDownload={!!gameData}
             isMobile={isMobile}
+            onCreateGameClick={() => setIsCreateGameModalOpen(true)}
           />
           
           {isEditMode && (

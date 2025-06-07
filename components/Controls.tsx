@@ -10,6 +10,8 @@ interface ControlsProps {
   onToggleEditMode: () => void;
   onDownloadSgf: () => void;
   canDownload: boolean;
+  onCreateGameClick: () => void;
+  isMobile?: boolean;
 }
 
 const Controls: React.FC<ControlsProps> = ({
@@ -22,6 +24,8 @@ const Controls: React.FC<ControlsProps> = ({
   onToggleEditMode,
   onDownloadSgf,
   canDownload,
+  onCreateGameClick,
+  isMobile,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -69,6 +73,14 @@ const Controls: React.FC<ControlsProps> = ({
       </div>
 
       <div className="space-y-2">
+        <button 
+          onClick={onCreateGameClick} 
+          className="w-full px-4 py-2 rounded font-semibold transition-colors bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-600 dark:hover:bg-blue-700"
+          disabled={isEditMode}
+        >
+          Создать новую игру
+        </button>
+        
         <button onClick={onToggleEditMode} className={toggleButtonClass} aria-pressed={isEditMode}>
           {isEditMode ? 'Exit Edit Mode (F2)' : 'Enter Edit Mode (F2)'}
         </button>
